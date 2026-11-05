@@ -1,0 +1,83 @@
+# Scenario: Let's Encrypt rate-limit → ZeroSSL (Pebble EAB) fallback in prod mode.
+# Primary CA is a local ACME stub that always returns 429; secondary is Pebble with EAB.
+# Successful secondary must keep mode=prod and must NOT write .downgradeCertMode.
+
+# LEGO_CA_* must be set before apinfra (pebble-start installs minica trust for both
+# the HTTPS rate-limit stub and Pebble, which share the same fixture certs).
+acme-ratelimit-start
+pebble-start
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: acme fallback fixture'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+# dig stub so DNS preflight for cert-issue-type=prod succeeds without real DNS.
+chmod 0755 bin/dig
+env PATH=$WORK/bin:$PATH
+
+exec apinfra
+stderr 'trying secondary CA'
+stderr 'secondary CA ok domain=e2e-fallback.apinfra.test mode=prod'
+stderr 'cert issued name=e2e-fallback.apinfra.test mode=prod'
+stderr 'done duration='
+# lego writes ACME progress to stderr; do not require an empty stderr.
+
+exists $HOME/infra/certbot/conf/live/e2e-fallback.apinfra.test/fullchain.pem
+exists $HOME/infra/certbot/conf/live/e2e-fallback.apinfra.test/privkey.pem
+# Successful FB must not schedule a mode downgrade.
+! exists $HOME/.downgradeCertMode
+docker-assert-running apinfra_e2e-web-web-1
+
+# Dump host ACME state files for inspection (sibling of infra/).
+exec sh -c 'echo "=== .retries ==="; if [ -f "$HOME/.retries" ]; then cat "$HOME/.retries"; else echo "(missing)"; fi'
+exec sh -c 'echo "=== .downgradeCertMode ==="; if [ -f "$HOME/.downgradeCertMode" ]; then cat "$HOME/.downgradeCertMode"; else echo "(missing)"; fi'
+exec sh -c 'echo "=== .events ==="; if [ -f "$HOME/.events" ]; then cat "$HOME/.events"; else echo "(missing)"; fi'
+
+pebble-stop
+acme-ratelimit-stop
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+certs.provider=letsencrypt
+certs.zerossl.AcmeKid=kid-1
+certs.zerossl.AcmeHmac=zWNDZM6eQGHWpSRTPal5eIUYFTu7EajVIoguysqZ9wG44nMEtx3MUAsUDkMTQ12W
+certs.letsencrypt.directory=https://localhost:18080/directory
+certs.letsencrypt.stagingDirectory=https://localhost:18080/directory
+certs.zerossl.directory=https://127.0.0.1:14000/dir
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        domain-name: e2e-fallback.apinfra.test
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: prod
+      cert-acme-email: e2e@apinfra.local
+
+-- git-repo/dev/e2e-web/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    container_name: e2e-web-container
+
+-- bin/dig --
+#!/bin/sh
+# Fake dig for e2e DNS preflight (ignores flags; always returns a loopback A record).
+echo '127.0.0.1'
+
+-- .env --

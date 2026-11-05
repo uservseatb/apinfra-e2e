@@ -1,0 +1,100 @@
+# Scenario: ACME rate-limit → .downgradeCertMode (prod → test), then next cycle issues test cert.
+#
+# Cycle 1: Let's Encrypt prod directory is the local 429 stub; no ZeroSSL secondary.
+# Cycle 2: point ACME at Pebble (ZeroSSL+EAB); effectiveMode=test from .downgradeCertMode.
+
+acme-ratelimit-start
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: acme downgrade fixture'
+cd ..
+
+cp .apinfra.ratelimit .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+chmod 0755 bin/dig
+env PATH=$WORK/bin:$PATH
+
+# --- Cycle 1: prod hits 429, schedule downgrade to test ---
+exec apinfra
+stderr 'rate limited domain=e2e-downgrade.apinfra.test'
+stderr 'downgrade prod -> test'
+stderr 'done duration='
+
+exists $HOME/.downgradeCertMode
+grep 'e2e-downgrade.apinfra.test' $HOME/.downgradeCertMode
+grep 'mode: test' $HOME/.downgradeCertMode
+! exists $HOME/infra/certbot/conf/live/e2e-downgrade.apinfra.test/fullchain.pem
+docker-assert-running apinfra_e2e-web-web-1
+
+acme-ratelimit-stop
+
+# --- Cycle 2: same settings (prod) but override → test against Pebble ---
+pebble-start
+cp .apinfra.pebble .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+env PATH=$WORK/bin:$PATH
+
+exec apinfra
+stderr 'using downgrade domain=e2e-downgrade.apinfra.test requested=prod effective=test'
+stderr 'cert issued name=e2e-downgrade.apinfra.test mode=test'
+stderr 'done duration='
+
+exists $HOME/infra/certbot/conf/live/e2e-downgrade.apinfra.test/fullchain.pem
+exists $HOME/infra/certbot/conf/live/e2e-downgrade.apinfra.test/privkey.pem
+exists $HOME/infra/certbot/conf/live/e2e-downgrade.apinfra.test/.issued-mode
+grep 'test' $HOME/infra/certbot/conf/live/e2e-downgrade.apinfra.test/.issued-mode
+# Downgrade file may still be present until until= expires; mode must remain test.
+grep 'mode: test' $HOME/.downgradeCertMode
+docker-assert-running apinfra_e2e-web-web-1
+
+pebble-stop
+
+-- .apinfra.ratelimit --
+namespace=dev
+repoBranch=main
+certs.provider=letsencrypt
+certs.letsencrypt.directory=https://localhost:18080/directory
+certs.letsencrypt.stagingDirectory=https://localhost:18080/directory
+
+-- .apinfra.pebble --
+namespace=dev
+repoBranch=main
+certs.provider=zerossl
+certs.zerossl.AcmeKid=kid-1
+certs.zerossl.AcmeHmac=zWNDZM6eQGHWpSRTPal5eIUYFTu7EajVIoguysqZ9wG44nMEtx3MUAsUDkMTQ12W
+certs.zerossl.directory=https://127.0.0.1:14000/dir
+certs.letsencrypt.directory=https://127.0.0.1:14000/dir
+certs.letsencrypt.stagingDirectory=https://127.0.0.1:14000/dir
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        domain-name: e2e-downgrade.apinfra.test
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: prod
+      cert-acme-email: e2e@apinfra.local
+
+-- git-repo/dev/e2e-web/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    container_name: e2e-web-container
+
+-- bin/dig --
+#!/bin/sh
+echo '127.0.0.1'
+
+-- .env --

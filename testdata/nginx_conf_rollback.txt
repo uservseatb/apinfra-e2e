@@ -1,0 +1,95 @@
+# Scenario: nginx conf rollback after failed ACME issue.
+# 1) Deploy port-only HTTP (cert none) → conf listens on inbound port.
+# 2) Switch to domain + prod ACME against 429 stub → new conf is written then restored.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: port-only baseline'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+# Cycle 1: port-only, no ACME.
+exec apinfra
+stderr 'done duration='
+exists $HOME/infra/nginx/conf/dev_e2e-web.conf
+grep 'listen 9999' $HOME/infra/nginx/conf/dev_e2e-web.conf
+! grep 'server_name e2e-rollback.apinfra.test' $HOME/infra/nginx/conf/dev_e2e-web.conf
+docker-assert-running apinfra_e2e-web-web-1
+
+# Cycle 2: domain + prod; conf changes (reload-before-issue), ACME rate-limits, conf restored.
+acme-ratelimit-start
+chmod 0755 bin/dig
+env PATH=$WORK/bin:$PATH
+
+cd git-repo
+cp ../settings.domain-prod.yml dev/settings.yml
+exec git add dev/settings.yml
+exec git commit -m 'fix: switch to domain ACME prod'
+cd ..
+
+exec apinfra
+stderr 'rate limited domain=e2e-rollback.apinfra.test'
+stderr 'rolled back those service confs'
+stderr 'done duration='
+
+# Pre-cycle port conf must be restored (not left as domain/ssl live vhost).
+grep 'listen 9999' $HOME/infra/nginx/conf/dev_e2e-web.conf
+! grep 'server_name e2e-rollback.apinfra.test' $HOME/infra/nginx/conf/dev_e2e-web.conf
+! grep 'ssl/live/e2e-rollback.apinfra.test' $HOME/infra/nginx/conf/dev_e2e-web.conf
+docker-assert-running apinfra_e2e-web-web-1
+
+acme-ratelimit-stop
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+certs.provider=letsencrypt
+certs.letsencrypt.directory=https://localhost:18080/directory
+certs.letsencrypt.stagingDirectory=https://localhost:18080/directory
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        port: 9999
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- settings.domain-prod.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        domain-name: e2e-rollback.apinfra.test
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: prod
+      cert-acme-email: e2e@apinfra.local
+
+-- git-repo/dev/e2e-web/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    container_name: e2e-web-container
+
+-- bin/dig --
+#!/bin/sh
+echo '127.0.0.1'
+
+-- .env --

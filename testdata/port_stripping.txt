@@ -1,0 +1,48 @@
+# Scenario 4: Automated Port Stripping security mechanism
+# Verifies that unauthorized host port mappings are stripped at merge time.
+
+# Step 1: Initialize Git repo with insecure compose file
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: insecure ports commit'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+# Step 2: Run agent
+exec apinfra
+stderr 'done duration='
+
+# Step 3: Assert containers are running but sandboxed
+docker-assert-running apinfra_e2e-db-postgres-1
+
+# Step 4: Custom assert to ensure port 5432 was not exposed to the public host
+docker-assert-no-public-ports apinfra_e2e-db-postgres-1
+
+
+# --- FILE TEMPLATES ---
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-db
+    enabled: true
+    config: {} # allow-ports-mapping is missing (defaults to false)
+
+-- git-repo/dev/e2e-db/docker-compose.yml --
+services:
+  postgres:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 5432; done"
+    ports:
+      - "5432:5432" # Insecure attempt to expose database to the world
+
+-- .env --

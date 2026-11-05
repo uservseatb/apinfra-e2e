@@ -1,0 +1,16 @@
+{
+  "pebble": {
+    "listenAddress": "127.0.0.1:14000",
+    "managementListenAddress": "127.0.0.1:15000",
+    "certificate": "certs/localhost/cert.pem",
+    "privateKey": "certs/localhost/key.pem",
+    "httpPort": 80,
+    "tlsPort": 443,
+    "ocspResponderURL": "",
+    "externalAccountBindingRequired": true,
+    "externalAccountMACKeys": {
+      "kid-1": "zWNDZM6eQGHWpSRTPal5eIUYFTu7EajVIoguysqZ9wG44nMEtx3MUAsUDkMTQ12W"
+    },
+    "certificateValidityPeriod": 157766400
+  }
+}
