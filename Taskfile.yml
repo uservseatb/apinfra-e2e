@@ -1,0 +1,40 @@
+version: "3"
+
+vars:
+  APINFRA_DIR: '{{.APINFRA_DIR | default "../apinfra"}}'
+  BINARY_NAME: apinfra
+
+tasks:
+  fmt:
+    desc: Format Go sources
+    cmds:
+      - go fmt ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  sync:
+    desc: Build apinfra in sibling repo and copy binary (+ README) here
+    cmds:
+      - task -d {{.APINFRA_DIR}} build
+      - mkdir -p bin
+      - cp {{.APINFRA_DIR}}/bin/{{.BINARY_NAME}} bin/{{.BINARY_NAME}}
+      - cp {{.APINFRA_DIR}}/README.md README.md
+
+  e2e:
+    desc: Run e2e testscripts (needs bin/apinfra and Docker)
+    cmds:
+      - go test -count=1 -parallel 1 -v ./...
+
+  check:
+    desc: fmt + vet + test
+    deps: [fmt, vet]
+    cmds:
+      - task: test
+
+  default:
+    desc: Default task
+    cmds:
+      - task: test

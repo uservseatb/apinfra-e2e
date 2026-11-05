@@ -16,24 +16,24 @@ It does **not** contain the agent source. Product code lives in `../apinfra`. Th
 2. Compiled binary at `bin/apinfra` (required; Setup fails if missing).
 3. Optional: Pebble on `PATH` / `$GOPATH/bin` — ACME scenarios install `github.com/letsencrypt/pebble/v2/cmd/pebble@v2.10.1` if absent.
 
-Local helper (gitignored) to rebuild and copy the binary + product README:
-
-```bash
-./build.sh   # runs task build in ../apinfra, copies bin/apinfra + README.md here
-```
-
 ## Commands
 
-Run from this repository root.
+Requires [go-task](https://taskfile.dev) (`brew install go-task`). Run from this repository root.
 
 ```bash
-go test -count=1 -parallel 1 -v ./...
+task sync    # task build in ../apinfra → copy bin/apinfra + README.md here
+task test    # go test -count=1 -parallel 1 -v ./...
+task check   # fmt + vet + test
+task fmt
+task vet
 
 # Single scenario (testscript file stem = name without .txt)
 go test -count=1 -parallel 1 -v ./... -run 'TestE2e/happy_path'
 ```
 
 Prefer `-parallel 1`: scenarios share host Docker and fixed ACME listen ports (`pebble` `:14000`, rate-limit stub `:18080`).
+
+Override sibling path if needed: `task sync APINFRA_DIR=/path/to/apinfra`.
 
 Do not commit `bin/apinfra` (see `.gitignore`). Do not vendor.
 
