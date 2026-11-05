@@ -1,8 +1,10 @@
-## E2E test scenarios
+# E2E scenarios
 
-Black-box scenarios for the standalone suite in this repository (`testdata/*.txt`, driven by `go test` inside DinD). Each file is a [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) archive against a local `file://` config Git repo and the compiled `bin/apinfra` binary.
+Inventory of black-box scenarios in `testdata/*.txt` ([testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) archives against a local `file://` config Git repo and `bin/apinfra`).
 
-### Implemented (`testdata/`)
+This file is the **only** scenario inventory. Do not maintain a parallel list in `README.md`.
+
+## Implemented (`testdata/`)
 
 | File | Covers |
 |------|--------|

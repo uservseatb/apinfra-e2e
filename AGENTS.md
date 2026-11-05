@@ -8,7 +8,7 @@ Standalone Go module (`apinfra_e2e`) that drives the compiled `apinfra` binary t
 
 It does **not** contain the agent source. Product code lives in `../apinfra`. This suite exercises real Git, Docker, Nginx (via the agent), and ACME (Pebble / local 429 stub).
 
-`README.md` is the **product** README (synced from `../apinfra` by `task sync`). Treat it as the behavior contract when writing or planning scenarios. The E2E scenario inventory lives in `e2e-scenarios.md` and is appended to `README.md` by `task sync`.
+`README.md` is the **product** README (synced from `../apinfra` by `task sync`). Treat it as the behavior contract when writing or planning scenarios. The inventory of implemented E2E scenarios lives only in [`E2E_SCENARIOS.md`](E2E_SCENARIOS.md) — never in `README.md`.
 
 ## Prerequisites
 
@@ -46,6 +46,7 @@ docker_assert.go      # docker-assert-* custom commands
 pebble.go             # pebble-start / pebble-stop
 acme_ratelimit.go     # acme-ratelimit-start / stop (always-429 ACME stub)
 testdata/*.txt        # one scenario per txtar archive
+E2E_SCENARIOS.md      # inventory of implemented scenarios (source of truth)
 fixtures/             # pebble EAB config, minica PEMs, deb examples
 bin/apinfra           # Linux binary under test (not in git; from task sync)
 Dockerfile            # Ubuntu + Docker CE + Go image for DinD
@@ -53,6 +54,31 @@ entrypoint.sh         # nested dockerd → go test
 run.sh                # docker build + privileged docker run
 Taskfile.yml          # sync / e2e / check
 ```
+
+## Scenario inventory & workflow
+
+**`README.md` is never edited for scenarios.** Product README is overwritten by `task sync` from `../apinfra`. Do not append scenario lists, planned gaps, or e2e notes to it.
+
+**`E2E_SCENARIOS.md` is the only inventory.** Keep every implemented `testdata/*.txt` listed there (file name + short coverage blurb). When you add or remove a scenario file, update this inventory in the same change.
+
+### When the user asks to invent / suggest a scenario
+
+1. Read `README.md` (behavior contract) and `E2E_SCENARIOS.md` (what already exists).
+2. Pick a README-promised behavior that is **not** yet covered in `E2E_SCENARIOS.md`.
+3. Implement it as `testdata/<name>.txt` following the conventions below.
+4. Add a row for it in `E2E_SCENARIOS.md`.
+5. **Do not run** the scenario (`task e2e`, `go test`, DinD, etc.). The user runs tests themselves.
+
+### When the user asks to add a specific scenario
+
+1. Check the request against `README.md` first.
+2. If the requested behavior **disagrees** with the README (wrong effect, undocumented detail, contradicts soft-fail / events / cert rules, etc.): stop, explain the mismatch, and agree on the scenario in dialogue before writing files.
+3. Once aligned: implement `testdata/<name>.txt`, update `E2E_SCENARIOS.md`, and stop.
+4. **Do not run** the scenario yourself.
+
+### Do not run added scenarios
+
+After adding or changing scenarios, do **not** execute e2e / `go test` / DinD to verify them unless the user explicitly asks. Just add the files and inventory entry.
 
 ## Writing a scenario
 
@@ -78,9 +104,10 @@ Each `testdata/<name>.txt` is a testscript archive:
 - Always stop Pebble / rate-limit servers started in the script (`pebble-stop`, `acme-ratelimit-stop`).
 - Match product behavior from `README.md` (validation soft-fail, cert rollback, port strip/rewrite, events). Do not assert implementation details that the README does not promise.
 - Change only what the task needs; no drive-by refactors of shared harness code unless required by the new scenario.
+- In `stderr` / `stdout` patterns, avoid unescaped regex metacharacters (especially `(` `)` `.`) unless intentional — testscript matches as regexp.
 
 ## Agent behavior
 
-- After harness Go changes: `go fmt ./...`, then `go test -count=1 -parallel 1 ./...` when Docker is available.
+- After harness Go changes: `go fmt ./...`. Do **not** run the e2e suite unless the user asks.
 - Never commit secrets, real registry tokens, or live ACME credentials — fixtures use local Pebble EAB / stub directories only.
-- Do not add Markdown docs the user did not ask for (except updating the README scenario list when adding/planning scenarios).
+- Do not add Markdown docs the user did not ask for. Scenario inventory updates go only to `E2E_SCENARIOS.md` (never `README.md`).

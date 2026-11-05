@@ -29,10 +29,6 @@ tasks:
         mkdir -p bin
         cp "{{.APINFRA_DIR}}/bin/{{.BINARY_NAME}}" "bin/{{.BINARY_NAME}}"
         cp "{{.APINFRA_DIR}}/README.md" README.md
-        if [ -f e2e-scenarios.md ]; then
-          printf '\n' >> README.md
-          cat e2e-scenarios.md >> README.md
-        fi
 
   e2e:
     desc: Run e2e tests in privileged Ubuntu DinD (isolates host :80/:443)
