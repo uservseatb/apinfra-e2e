@@ -16,25 +16,38 @@ tasks:
       - go vet ./...
 
   sync:
-    desc: Build apinfra in sibling repo and copy binary (+ README) here
+    desc: Cross-compile Linux apinfra into bin/ (+ copy product README)
     cmds:
-      - task -d {{.APINFRA_DIR}} build
-      - mkdir -p bin
-      - cp {{.APINFRA_DIR}}/bin/{{.BINARY_NAME}} bin/{{.BINARY_NAME}}
-      - cp {{.APINFRA_DIR}}/README.md README.md
+      - |
+        set -euo pipefail
+        case "$(uname -m)" in
+          x86_64) ARCH="${ARCH:-amd64}" ;;
+          aarch64|arm64) ARCH="${ARCH:-arm64}" ;;
+          *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
+#        esac
+#        (cd "{{.APINFRA_DIR}}" && GOOS=linux GOARCH="${ARCH}" CGO_ENABLED=0 task build)
+#        mkdir -p bin
+#        cp "{{.APINFRA_DIR}}/bin/{{.BINARY_NAME}}" "bin/{{.BINARY_NAME}}"
+#        cp "{{.APINFRA_DIR}}/README.md" README.md
 
   e2e:
-    desc: Run e2e testscripts (needs bin/apinfra and Docker)
+    desc: Run e2e tests in privileged Ubuntu DinD (isolates host :80/:443)
+    deps: [sync]
     cmds:
-      - go test -count=1 -parallel 1 -v ./...
+      - bash ./run.sh
+
+  test:
+    desc: Alias for e2e (DinD)
+    cmds:
+      - task: e2e
 
   check:
-    desc: fmt + vet + test
+    desc: fmt + vet + e2e
     deps: [fmt, vet]
     cmds:
-      - task: test
+      - task: e2e
 
   default:
     desc: Default task
     cmds:
-      - task: test
+      - task: e2e

@@ -18,22 +18,22 @@ It does **not** contain the agent source. Product code lives in `../apinfra`. Th
 
 ## Commands
 
-Requires [go-task](https://taskfile.dev) (`brew install go-task`). Run from this repository root.
+Requires [go-task](https://taskfile.dev) (`brew install go-task`) and Docker. Run from this repository root.
+
+E2E runs inside **privileged Ubuntu DinD** (`run.sh` → nested `dockerd`) so host `:80`/`:443` do not collide with `apinfra-proxy`.
 
 ```bash
-task sync    # task build in ../apinfra → copy bin/apinfra + README.md here
-task test    # go test -count=1 -parallel 1 -v ./...
-task check   # fmt + vet + test
+task sync    # GOOS=linux cross-build ../apinfra → bin/apinfra + README.md
+task e2e     # build DinD image, run privileged container, go test inside
+task test    # alias for e2e
+task check   # fmt + vet + e2e
 task fmt
 task vet
-
-# Single scenario (testscript file stem = name without .txt)
-go test -count=1 -parallel 1 -v ./... -run 'TestE2e/happy_path'
 ```
 
-Prefer `-parallel 1`: scenarios share host Docker and fixed ACME listen ports (`pebble` `:14000`, rate-limit stub `:18080`).
+`task sync` must produce a **Linux** `bin/apinfra` (the DinD container cannot exec a Darwin binary). Override sibling path: `task sync APINFRA_DIR=/path/to/apinfra`.
 
-Override sibling path if needed: `task sync APINFRA_DIR=/path/to/apinfra`.
+Inside DinD, tests use `-count=1 -parallel 1` (shared nested Docker + fixed ACME ports: pebble `:14000`, rate-limit stub `:18080`).
 
 Do not commit `bin/apinfra` (see `.gitignore`). Do not vendor.
 
@@ -47,7 +47,11 @@ pebble.go             # pebble-start / pebble-stop
 acme_ratelimit.go     # acme-ratelimit-start / stop (always-429 ACME stub)
 testdata/*.txt        # one scenario per txtar archive
 fixtures/             # pebble EAB config, minica PEMs, deb examples
-bin/apinfra           # binary under test (not in git)
+bin/apinfra           # Linux binary under test (not in git; from task sync)
+Dockerfile            # Ubuntu + Docker CE + Go image for DinD
+entrypoint.sh         # nested dockerd → go test
+run.sh                # docker build + privileged docker run
+Taskfile.yml          # sync / e2e / check
 ```
 
 ## Writing a scenario
