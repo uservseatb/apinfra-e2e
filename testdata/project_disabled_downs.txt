@@ -1,0 +1,97 @@
+# Scenario: enabled=false downs that project; sibling project stays running.
+# README: disabled projects are bypassed; docker downs unused/disabled apps.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: two projects enabled'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-keep-web
+docker-assert-running apinfra_e2e-drop-web
+
+cd git-repo
+cp ../settings.drop-disabled.yml dev/settings.yml
+exec git add dev/settings.yml
+exec git commit -m 'chore: disable e2e-drop'
+cd ..
+
+exec apinfra
+stderr 'done duration='
+stderr 'down unused project=e2e-drop'
+
+! docker-assert-running apinfra_e2e-drop-web
+docker-assert-running apinfra_e2e-keep-web
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-keep
+    enabled: true
+    proxy:
+      inbound:
+        port: 9999
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+  - name: e2e-drop
+    enabled: true
+    proxy:
+      inbound:
+        port: 9998
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- settings.drop-disabled.yml --
+version: "1.0"
+projects:
+  - name: e2e-keep
+    enabled: true
+    proxy:
+      inbound:
+        port: 9999
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+  - name: e2e-drop
+    enabled: false
+    proxy:
+      inbound:
+        port: 9998
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-keep/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+
+-- git-repo/dev/e2e-drop/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+
+-- .env --

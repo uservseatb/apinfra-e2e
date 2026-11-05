@@ -21,3 +21,5 @@ This file is the **only** scenario inventory. Do not maintain a parallel list in
 | `dns_preflight_skip.txt` | Empty `dig +short` skips ACME for the cycle (no retry / downgrade / `.installedCert`) |
 | `heal_deleted_container.txt` | Two projects; `docker rm` one service in a 2-container stack → next cycle recreates it |
 | `heal_stopped_container.txt` | Two projects; `docker stop` one service in a 2-container stack → next cycle starts it again |
+| `project_disabled_downs.txt` | Two projects; `enabled: false` → `compose down` for that app; sibling stays running |
+| `network_mode_host_stripped.txt` | `network_mode: host` stripped before start; runtime NetworkMode is not `host` |
