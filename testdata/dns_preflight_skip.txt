@@ -1,0 +1,69 @@
+# Scenario: DNS preflight skip — empty dig +short skips ACME for this cycle only.
+# No retry bump, no mode downgrade, no .installedCert; apps still come up.
+# ACME is pointed at a closed port so a broken dig stub cannot accidentally issue.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: dns preflight skip fixture'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+# dig stub returns no answers → preflight fails before ACME.
+chmod 0755 bin/dig
+env PATH=$WORK/bin:$PATH
+
+exec apinfra
+stderr 'skip cert issue name=e2e-dns.apinfra.test'
+stderr 'returned no IPs'
+stderr 'done duration='
+! stderr 'obtain primary'
+! stderr 'cert issued'
+
+! exists $HOME/infra/certbot/conf/live/e2e-dns.apinfra.test/fullchain.pem
+! exists $HOME/.retries
+! exists $HOME/.downgradeCertMode
+! exists $HOME/.installedCert
+! exists $HOME/.events
+docker-assert-running apinfra_e2e-web-web-1
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+certs.provider=letsencrypt
+certs.letsencrypt.directory=https://127.0.0.1:1/directory
+certs.letsencrypt.stagingDirectory=https://127.0.0.1:1/directory
+certIssueTimeout=10s
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        domain-name: e2e-dns.apinfra.test
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: prod
+      cert-acme-email: e2e@apinfra.local
+
+-- git-repo/dev/e2e-web/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    container_name: e2e-web-container
+
+-- bin/dig --
+#!/bin/sh
+# Empty dig +short → skip issuance (no retry / no downgrade).
+exit 0
+
+-- .env --

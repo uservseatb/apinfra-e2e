@@ -8,7 +8,7 @@ Standalone Go module (`apinfra_e2e`) that drives the compiled `apinfra` binary t
 
 It does **not** contain the agent source. Product code lives in `../apinfra`. This suite exercises real Git, Docker, Nginx (via the agent), and ACME (Pebble / local 429 stub).
 
-`README.md` is the **product** README (synced from `../apinfra` by local `build.sh`). Treat it as the behavior contract when writing or planning scenarios. Scenario inventory and coverage gaps are documented at the end of that README.
+`README.md` is the **product** README (synced from `../apinfra` by `task sync`). Treat it as the behavior contract when writing or planning scenarios. The E2E scenario inventory lives in `e2e-scenarios.md` and is appended to `README.md` by `task sync`.
 
 ## Prerequisites
 
