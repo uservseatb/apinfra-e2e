@@ -4,7 +4,7 @@ Instructions for AI coding agents working in this **end-to-end** test repository
 
 ## What this repo is
 
-Standalone Go module (`apinfra_e2e`) that drives the compiled `apinfra` binary through [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scenarios under `testdata/`.
+Standalone Go module (`github.com/uservseatb/apinfra-e2e`) that drives the compiled `apinfra` binary through [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scenarios under `testdata/`.
 
 It does **not** contain the agent source. Product code lives in `../apinfra`. This suite exercises real Git, Docker, Nginx (via the agent), and ACME (Pebble / local 429 stub).
 

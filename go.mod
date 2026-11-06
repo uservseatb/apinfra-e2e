@@ -1,4 +1,4 @@
-module apinfra_e2e
+module github.com/uservseatb/apinfra-e2e
 
 go 1.27.2
 

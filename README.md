@@ -4,6 +4,8 @@ End-to-end tests for [apinfra](../apinfra) — a GitOps agent that deploys docke
 
 This repo does **not** contain the agent source. It runs the compiled `apinfra` binary against real Git, Docker, Nginx, and local ACME stubs (Pebble / rate-limit), using [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scenarios.
 
+Licensed under the MIT License — see [LICENSE](LICENSE).
+
 ## What it covers
 
 Scenarios live under `testdata/` and are grouped by theme:
