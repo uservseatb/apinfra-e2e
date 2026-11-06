@@ -1,9 +1,5 @@
 version: "3"
 
-vars:
-  APINFRA_DIR: '{{.APINFRA_DIR | default "../apinfra"}}'
-  BINARY_NAME: apinfra
-
 tasks:
   fmt:
     desc: Format Go sources
@@ -15,24 +11,8 @@ tasks:
     cmds:
       - go vet ./...
 
-  sync:
-    desc: Cross-compile Linux apinfra into bin/ (+ copy product README)
-    cmds:
-      - |
-        set -euo pipefail
-        case "$(uname -m)" in
-          x86_64) ARCH="${ARCH:-amd64}" ;;
-          aarch64|arm64) ARCH="${ARCH:-arm64}" ;;
-          *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
-        esac
-        (cd "{{.APINFRA_DIR}}" && GOOS=linux GOARCH="${ARCH}" CGO_ENABLED=0 task build)
-        mkdir -p bin
-        cp "{{.APINFRA_DIR}}/bin/{{.BINARY_NAME}}" "bin/{{.BINARY_NAME}}"
-        cp "{{.APINFRA_DIR}}/README.md" README.md
-
   e2e:
     desc: Run e2e tests in privileged Ubuntu DinD (isolates host :80/:443)
-    deps: [sync]
     cmds:
       - bash ./run.sh
 

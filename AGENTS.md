@@ -8,12 +8,12 @@ Standalone Go module (`apinfra_e2e`) that drives the compiled `apinfra` binary t
 
 It does **not** contain the agent source. Product code lives in `../apinfra`. This suite exercises real Git, Docker, Nginx (via the agent), and ACME (Pebble / local 429 stub).
 
-`README.md` is the **product** README (synced from `../apinfra` by `task sync`). Treat it as the behavior contract when writing or planning scenarios. The inventory of implemented E2E scenarios lives only in [`E2E_SCENARIOS.md`](E2E_SCENARIOS.md) — never in `README.md`.
+`README.md` is the **product** README (kept in sync with `../apinfra`). Treat it as the behavior contract when writing or planning scenarios. The inventory of implemented E2E scenarios lives only in [`E2E_SCENARIOS.md`](E2E_SCENARIOS.md) — never in `README.md`.
 
 ## Prerequisites
 
 1. Docker available to the test process (`DOCKER_*` env is propagated).
-2. Compiled binary at `bin/apinfra` (required; Setup fails if missing).
+2. Compiled **Linux** binary at `bin/apinfra` (required; Setup fails if missing). The DinD container cannot exec a Darwin binary — build/copy it from `../apinfra` yourself before `task e2e`.
 3. Optional: Pebble on `PATH` / `$GOPATH/bin` — ACME scenarios install `github.com/letsencrypt/pebble/v2/cmd/pebble@v2.10.1` if absent.
 
 ## Commands
@@ -23,15 +23,12 @@ Requires [go-task](https://taskfile.dev) (`brew install go-task`) and Docker. Ru
 E2E runs inside **privileged Ubuntu DinD** (`run.sh` → nested `dockerd`) so host `:80`/`:443` do not collide with `apinfra-proxy`.
 
 ```bash
-task sync    # GOOS=linux cross-build ../apinfra → bin/apinfra + README.md
 task e2e     # build DinD image, run privileged container, go test inside
 task test    # alias for e2e
 task check   # fmt + vet + e2e
 task fmt
 task vet
 ```
-
-`task sync` must produce a **Linux** `bin/apinfra` (the DinD container cannot exec a Darwin binary). Override sibling path: `task sync APINFRA_DIR=/path/to/apinfra`.
 
 Inside DinD, tests use `-count=1 -parallel 1` (shared nested Docker + fixed ACME ports: pebble `:14000`, rate-limit stub `:18080`).
 
@@ -48,16 +45,16 @@ acme_ratelimit.go     # acme-ratelimit-start / stop (always-429 ACME stub)
 testdata/*.txt        # one scenario per txtar archive
 E2E_SCENARIOS.md      # inventory of implemented scenarios (source of truth)
 fixtures/             # pebble EAB config, minica PEMs, deb examples
-bin/apinfra           # Linux binary under test (not in git; from task sync)
+bin/apinfra           # Linux binary under test (not in git; supply before e2e)
 Dockerfile            # Ubuntu + Docker CE + Go image for DinD
 entrypoint.sh         # nested dockerd → go test
 run.sh                # docker build + privileged docker run
-Taskfile.yml          # sync / e2e / check
+Taskfile.yml          # e2e / check / fmt / vet
 ```
 
 ## Scenario inventory & workflow
 
-**`README.md` is never edited for scenarios.** Product README is overwritten by `task sync` from `../apinfra`. Do not append scenario lists, planned gaps, or e2e notes to it.
+**`README.md` is never edited for scenarios.** Product README mirrors `../apinfra`. Do not append scenario lists, planned gaps, or e2e notes to it.
 
 **`E2E_SCENARIOS.md` is the only inventory.** Keep every implemented `testdata/*.txt` listed there (file name + short coverage blurb). When you add or remove a scenario file, update this inventory in the same change.
 
@@ -105,6 +102,18 @@ Each `testdata/<name>.txt` is a testscript archive:
 - Match product behavior from `README.md` (validation soft-fail, cert rollback, port strip/rewrite, events). Do not assert implementation details that the README does not promise.
 - Change only what the task needs; no drive-by refactors of shared harness code unless required by the new scenario.
 - In `stderr` / `stdout` patterns, avoid unescaped regex metacharacters (especially `(` `)` `.`) unless intentional — testscript matches as regexp.
+
+## Commits
+
+When the user asks to create a git commit, follow common open-source practices (Conventional Commits, as already used in this repo’s history):
+
+- **Subject:** `<type>: <imperative summary>` — e.g. `test:`, `docs:`, `fix:`, `chore:`, `refactor:`.
+- Keep the subject short (~72 chars); focus on **why** / intent, not a file list.
+- Optional body: motivation and user-visible impact; wrap near 72 columns; blank line after the subject.
+- **One logical change per commit** — do not mix unrelated edits.
+- Never commit secrets, live credentials, or `bin/apinfra`.
+- Commit **only** when the user asks; do not push unless asked.
+- Prefer `git commit` with a HEREDOC for the message; do not skip hooks unless the user explicitly requests it.
 
 ## Agent behavior
 
