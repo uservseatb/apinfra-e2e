@@ -28,7 +28,7 @@ task fmt
 task vet
 
 # Filter by theme or single scenario (args after -- → DinD go test):
-task e2e -- docker                 # cycle|docker|nginx|certs
+task e2e -- docker                 # cycle|docker|nginx|certs|env
 task e2e -- cycle/happy_path       # one testdata/<theme>/<name>.txt
 ```
 
@@ -68,6 +68,7 @@ Scenarios live in **theme subdirectories** — exactly one level: `testdata/<the
 | `docker/` | `e2e/docker_test.go` | `TestE2eDocker` | Compose/Docker apply: ports, `network_mode`, heal, enable/disable projects |
 | `nginx/` | `e2e/nginx_test.go` | `TestE2eNginx` | Nginx proxy conf write / rollback |
 | `certs/` | `e2e/certs_test.go` | `TestE2eCerts` | Certificate issuance: ACME, fallback, downgrade, retries, DNS preflight |
+| `env/` | `e2e/env_test.go` | `TestE2eEnv` | Host `.env` prefix override + sidecar Java-style key normalization |
 
 When adding a scenario, place it under the matching theme. If none fit and the new area is substantial, introduce a new top-level theme, add `e2e/<theme>_test.go` with `TestE2e<Theme>`, and document it here and in `E2E_SCENARIOS.md` in the same change.
 

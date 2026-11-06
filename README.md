@@ -34,7 +34,7 @@ task e2e     # build DinD image, run tests inside
 task fmt
 task vet
 
-# One theme: cycle | docker | nginx | certs
+# One theme: cycle | docker | nginx | certs | env
 task e2e -- docker
 
 # One scenario: testdata/<theme>/<name>.txt

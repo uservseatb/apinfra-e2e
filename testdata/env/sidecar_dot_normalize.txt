@@ -1,0 +1,50 @@
+# Scenario: project sidecar .env Java-style keys normalize to UPPER_SNAKE.
+# README: dots → underscores, uppercased (web.image.tag → WEB_IMAGE_TAG).
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: storefront dotted sidecar env'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'done duration='
+
+docker-assert-running apinfra_storefront-web
+exists $HOME/infra/apps/storefront/.env
+grep '^WEB_IMAGE_TAG=dev-v0\.0\.203$' $HOME/infra/apps/storefront/.env
+! grep 'web\.image\.tag' $HOME/infra/apps/storefront/.env
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: storefront
+    enabled: true
+    proxy:
+      inbound:
+        port: 9999
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/storefront/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+
+-- git-repo/dev/storefront/.env --
+web.image.tag=dev-v0.0.203
+
+-- .env --

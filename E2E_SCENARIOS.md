@@ -54,3 +54,12 @@ Issue, fallback, downgrade, retries, DNS preflight, mock self-signed.
 | `cert_issue_failed.txt` | Non–rate-limit ACME fail → `.retries` block + `cert_issue_failed`; next cycle skips CA |
 | `dns_preflight_skip.txt` | Empty `dig +short` skips ACME for the cycle (no retry / downgrade / `.installedCert`) |
 | `mock_domain_cert.txt` | Domain + `mock` → local PEMs under `mockcerts/<domain>/` (no ACME); nginx HTTPS |
+
+### `env/` — Host / project environment
+
+Host `.env` project-prefix injection and sidecar `.env` key normalization.
+
+| File | Covers |
+|------|--------|
+| `host_overrides_sidecar.txt` | `STOREFRONT_MARKER` on host overrides sidecar `MARKER` in `infra/apps/storefront/.env` |
+| `sidecar_dot_normalize.txt` | Sidecar `web.image.tag` → `WEB_IMAGE_TAG` in applied project `.env` |

@@ -729,9 +729,3 @@ dockerComposePullTimeout=15m
 certIssueTimeout=5m
 nginxCLITimeout=45s
 ```
-
-## Troubleshooting
-
-Nothing shows up at localhost:3000 — make sure Docker is running and the socket is accessible at `/var/run/docker.sock`.
-
-Still stuck? Open a question in GitHub Discussions — we're happy to help.

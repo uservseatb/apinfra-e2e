@@ -68,6 +68,7 @@ theme_to_run() {
 	docker) echo TestE2eDocker ;;
 	nginx) echo TestE2eNginx ;;
 	certs|cert) echo TestE2eCerts ;;
+	env) echo TestE2eEnv ;;
 	*) return 1 ;;
 	esac
 }
