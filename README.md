@@ -31,16 +31,22 @@ Tests run inside a privileged Ubuntu Docker-in-Docker container so host ports `:
 
 ```bash
 task e2e     # build DinD image, run tests inside
-task test    # alias for e2e
-task check   # fmt + vet + e2e
 task fmt
 task vet
+
+# One theme: cycle | docker | nginx | certs
+task e2e -- docker
+
+# One scenario: testdata/<theme>/<name>.txt
+task e2e -- cycle/happy_path
 ```
 
 Or directly:
 
 ```bash
 ./env/run.sh
+./env/run.sh docker
+./env/run.sh cycle/happy_path
 ```
 
 ## Layout

@@ -12,6 +12,9 @@
 #
 # Usage (from repo root, or via: task e2e):
 #   ./env/run.sh
+#   ./env/run.sh docker
+#   ./env/run.sh cycle/happy_path
+# Shorthand theme / theme/name is rewritten for go test inside the container.
 set -euo pipefail
 
 ENVDIR="$(cd "$(dirname "$0")" && pwd)"
@@ -54,4 +57,5 @@ docker run --rm --privileged \
 	--name "apinfra-e2e-$$" \
 	-v "${ROOT}:/src" \
 	-e "DOCKER_STORAGE_DRIVER=${DOCKER_STORAGE_DRIVER:-vfs}" \
-	"${IMAGE_NAME}"
+	"${IMAGE_NAME}" \
+	"$@"

@@ -12,22 +12,13 @@ tasks:
       - go vet ./...
 
   e2e:
-    desc: Run e2e tests in privileged Ubuntu DinD (isolates host :80/:443)
+    desc: "Run e2e in DinD. After --: theme (docker|certs|…) or scenario (cycle/happy_path)"
     cmds:
-      - bash ./env/run.sh
-
-  test:
-    desc: Alias for e2e (DinD)
-    cmds:
-      - task: e2e
-
-  check:
-    desc: fmt + vet + e2e
-    deps: [fmt, vet]
-    cmds:
-      - task: e2e
+      - bash ./env/run.sh {{.CLI_ARGS}}
 
   default:
-    desc: Default task
+    desc: Default task (e2e)
     cmds:
       - task: e2e
+        vars:
+          CLI_ARGS: "{{.CLI_ARGS}}"

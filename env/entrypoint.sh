@@ -57,4 +57,131 @@ pebble -version || true
 
 cd /src
 # -parallel 1: testscript always calls t.Parallel(); share one Docker daemon serially.
-exec go test -count=1 -parallel 1 -v ./...
+# Extra args come from: task e2e -- ... / ./env/run.sh ...
+# Shorthand (preferred):
+#   task e2e -- docker
+#   task e2e -- cycle/happy_path
+# Still accepted: -run TestE2eDocker / -run TestScenario theme/name
+theme_to_run() {
+	case "$1" in
+	cycle) echo TestE2eCycle ;;
+	docker) echo TestE2eDocker ;;
+	nginx) echo TestE2eNginx ;;
+	certs|cert) echo TestE2eCerts ;;
+	*) return 1 ;;
+	esac
+}
+
+go_args=()
+theme=""
+scenario=""
+wants_scenario=0
+has_run=0
+i=1
+while [[ "${i}" -le "$#" ]]; do
+	arg="${!i}"
+	case "${arg}" in
+	-run)
+		next="$((i + 1))"
+		if [[ "${next}" -gt "$#" ]]; then
+			echo "apinfra-e2e: -run requires an argument" >&2
+			exit 1
+		fi
+		pattern="${!next}"
+		go_args+=(-run "${pattern}")
+		has_run=1
+		if [[ "${pattern}" == *TestScenario* ]]; then
+			wants_scenario=1
+		fi
+		i=$((i + 2))
+		continue
+		;;
+	-run=*)
+		pattern="${arg#-run=}"
+		go_args+=("${arg}")
+		has_run=1
+		if [[ "${pattern}" == *TestScenario* ]]; then
+			wants_scenario=1
+		fi
+		i=$((i + 1))
+		continue
+		;;
+	-args)
+		echo "apinfra-e2e: pass theme or theme/name after -- ; example: task e2e -- docker   or   task e2e -- cycle/happy_path" >&2
+		exit 1
+		;;
+	esac
+
+	if [[ "${arg}" == -* ]]; then
+		go_args+=("${arg}")
+		i=$((i + 1))
+		continue
+	fi
+
+	path="${arg#./}"
+	path="${path#testdata/}"
+
+	# Bare theme: cycle|docker|nginx|certs (cert → certs)
+	if run_name="$(theme_to_run "${path}")"; then
+		if [[ -n "${theme}" ]]; then
+			echo "apinfra-e2e: multiple themes: ${theme} and ${path}" >&2
+			exit 1
+		fi
+		if [[ "${path}" == "cert" ]]; then
+			theme="certs"
+		else
+			theme="${path}"
+		fi
+		i=$((i + 1))
+		continue
+	fi
+
+	# Scenario: theme/name or theme/name.txt
+	if [[ "${path}" =~ ^[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+$ ]]; then
+		if [[ -n "${scenario}" ]]; then
+			echo "apinfra-e2e: multiple scenario paths: ${scenario} and ${path}" >&2
+			exit 1
+		fi
+		scenario="${path}"
+		i=$((i + 1))
+		continue
+	fi
+
+	echo "apinfra-e2e: unknown arg ${arg@Q} (expected theme, theme/name, or go test flags)" >&2
+	exit 1
+done
+
+if [[ -n "${theme}" && -n "${scenario}" ]]; then
+	echo "apinfra-e2e: pass either a theme (${theme}) or a scenario (${scenario}), not both" >&2
+	exit 1
+fi
+if [[ -n "${scenario}" ]]; then
+	wants_scenario=1
+fi
+if [[ "${wants_scenario}" -eq 1 && -z "${scenario}" ]]; then
+	echo "apinfra-e2e: scenario path required: task e2e -- theme/name" >&2
+	exit 1
+fi
+if [[ "${has_run}" -eq 1 && ( -n "${theme}" || -n "${scenario}" ) ]]; then
+	echo "apinfra-e2e: use either -run ... or a theme/scenario shorthand, not both" >&2
+	exit 1
+fi
+
+if [[ -n "${theme}" ]]; then
+	run_name="$(theme_to_run "${theme}")"
+	go_args+=(-run "${run_name}")
+	echo "apinfra-e2e: running theme ${theme} (${run_name})"
+fi
+
+if [[ -n "${scenario}" ]]; then
+	script="${scenario}"
+	[[ "${script}" == *.txt ]] || script="${script}.txt"
+	if [[ ! -f "testdata/${script}" ]]; then
+		echo "apinfra-e2e: scenario not found: testdata/${script}" >&2
+		exit 1
+	fi
+	go_args+=(-run TestScenario -args "${scenario}")
+	echo "apinfra-e2e: running scenario testdata/${script}"
+fi
+
+exec go test -count=1 -parallel 1 -v ./... "${go_args[@]}"

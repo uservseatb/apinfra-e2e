@@ -24,10 +24,12 @@ E2E runs inside **privileged Ubuntu DinD** (`env/run.sh` → nested `dockerd`) s
 
 ```bash
 task e2e     # build DinD image, run privileged container, go test inside
-task test    # alias for e2e
-task check   # fmt + vet + e2e
 task fmt
 task vet
+
+# Filter by theme or single scenario (args after -- → DinD go test):
+task e2e -- docker                 # cycle|docker|nginx|certs
+task e2e -- cycle/happy_path       # one testdata/<theme>/<name>.txt
 ```
 
 Inside DinD, tests use `-count=1 -parallel 1` (shared nested Docker + fixed ACME ports: pebble `:14000`, rate-limit stub `:18080`).
@@ -45,7 +47,7 @@ README.md             # human overview of this e2e repo
 E2E_SCENARIOS.md      # inventory of implemented scenarios (source of truth)
 fixtures/             # pebble EAB config, minica PEMs, deb examples
 bin/apinfra           # Linux binary under test (not in git; supply before e2e)
-Taskfile.yml          # e2e / check / fmt / vet
+Taskfile.yml          # e2e / fmt / vet
 ```
 
 
