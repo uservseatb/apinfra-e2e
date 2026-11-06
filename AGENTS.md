@@ -37,12 +37,12 @@ Do not commit `bin/apinfra` (see `.gitignore`). Do not vendor.
 ## Layout
 
 ```text
-main_test.go          # testscript.Run + PATH/HOME setup
+main_test.go          # TestE2e<Theme> per testdata/<theme>/ + PATH/HOME setup
 postinst_setup.go     # mirrors .deb postinst home layout under $WORK
 docker_assert.go      # docker-assert-* custom commands
 pebble.go             # pebble-start / pebble-stop
 acme_ratelimit.go     # acme-ratelimit-start / stop (always-429 ACME stub)
-testdata/*.txt        # one scenario per txtar archive
+testdata/<theme>/     # theme folders (one level); one scenario per *.txt archive
 E2E_SCENARIOS.md      # inventory of implemented scenarios (source of truth)
 fixtures/             # pebble EAB config, minica PEMs, deb examples
 bin/apinfra           # Linux binary under test (not in git; supply before e2e)
@@ -52,25 +52,43 @@ run.sh                # docker build + privileged docker run
 Taskfile.yml          # e2e / check / fmt / vet
 ```
 
+## Scenario layout (`testdata/`)
+
+Scenarios live in **theme subdirectories** — exactly one level: `testdata/<theme>/<name>.txt`.
+
+- **No** scripts at `testdata/` root.
+- **No** nested theme folders (`testdata/a/b/…`); only one level of themes.
+- Prefer a **small set of broad themes** over many tiny folders. Reuse an existing theme when the behavior fits; add a new theme only when a cluster of scenarios would clearly belong together.
+- Each theme has a dedicated `TestE2e<Theme>` in `main_test.go` with `Dir: "testdata/<theme>"`. Current themes:
+
+| Theme | Test | Focus |
+|-------|------|--------|
+| `cycle/` | `TestE2eCycle` | Agent cycle: first deploy, idempotent re-run, validation soft-fail |
+| `docker/` | `TestE2eDocker` | Compose/Docker apply: ports, `network_mode`, heal, enable/disable projects |
+| `nginx/` | `TestE2eNginx` | Nginx proxy conf write / rollback |
+| `certs/` | `TestE2eCerts` | Certificate issuance: ACME, fallback, downgrade, retries, DNS preflight |
+
+When adding a scenario, place it under the matching theme. If none fit and the new area is substantial, introduce a new top-level theme, add `TestE2e<Theme>` in `main_test.go`, and document it here and in `E2E_SCENARIOS.md` in the same change.
+
 ## Scenario inventory & workflow
 
 **`README.md` is never edited for scenarios.** Product README mirrors `../apinfra`. Do not append scenario lists, planned gaps, or e2e notes to it.
 
-**`E2E_SCENARIOS.md` is the only inventory.** Keep every implemented `testdata/*.txt` listed there (file name + short coverage blurb). When you add or remove a scenario file, update this inventory in the same change.
+**`E2E_SCENARIOS.md` is the only inventory.** Keep every implemented `testdata/<theme>/*.txt` listed there (path + short coverage blurb), grouped by theme. When you add or remove a scenario file, update this inventory in the same change.
 
 ### When the user asks to invent / suggest a scenario
 
 1. Read `README.md` (behavior contract) and `E2E_SCENARIOS.md` (what already exists).
 2. Pick a README-promised behavior that is **not** yet covered in `E2E_SCENARIOS.md`.
-3. Implement it as `testdata/<name>.txt` following the conventions below.
-4. Add a row for it in `E2E_SCENARIOS.md`.
+3. Implement it as `testdata/<theme>/<name>.txt` following the conventions below.
+4. Add a row for it in `E2E_SCENARIOS.md` under the right theme.
 5. **Do not run** the scenario (`task e2e`, `go test`, DinD, etc.). The user runs tests themselves.
 
 ### When the user asks to add a specific scenario
 
 1. Check the request against `README.md` first.
 2. If the requested behavior **disagrees** with the README (wrong effect, undocumented detail, contradicts soft-fail / events / cert rules, etc.): stop, explain the mismatch, and agree on the scenario in dialogue before writing files.
-3. Once aligned: implement `testdata/<name>.txt`, update `E2E_SCENARIOS.md`, and stop.
+3. Once aligned: implement `testdata/<theme>/<name>.txt`, update `E2E_SCENARIOS.md`, and stop.
 4. **Do not run** the scenario yourself.
 
 ### Do not run added scenarios
@@ -79,7 +97,7 @@ After adding or changing scenarios, do **not** execute e2e / `go test` / DinD to
 
 ## Writing a scenario
 
-Each `testdata/<name>.txt` is a testscript archive:
+Each `testdata/<theme>/<name>.txt` is a testscript archive:
 
 1. Start with a `# Scenario: …` comment stating intent and assertions.
 2. Init a local Git config repo under `git-repo/`, commit fixtures, point `.apinfra` at `file://$WORK/git-repo`.

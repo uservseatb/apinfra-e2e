@@ -9,9 +9,33 @@ import (
 	"github.com/rogpeppe/go-internal/testscript"
 )
 
-func TestE2e(t *testing.T) {
+func TestE2eCycle(t *testing.T) {
 	testscript.Run(t, testscript.Params{
-		Dir:   "testdata",
+		Dir:   "testdata/cycle",
+		Setup: setup(),
+		Cmds:  commands,
+	})
+}
+
+func TestE2eDocker(t *testing.T) {
+	testscript.Run(t, testscript.Params{
+		Dir:   "testdata/docker",
+		Setup: setup(),
+		Cmds:  commands,
+	})
+}
+
+func TestE2eNginx(t *testing.T) {
+	testscript.Run(t, testscript.Params{
+		Dir:   "testdata/nginx",
+		Setup: setup(),
+		Cmds:  commands,
+	})
+}
+
+func TestE2eCerts(t *testing.T) {
+	testscript.Run(t, testscript.Params{
+		Dir:   "testdata/certs",
 		Setup: setup(),
 		Cmds:  commands,
 	})
