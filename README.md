@@ -1,6 +1,6 @@
 # apinfra-e2e
 
-End-to-end tests for [apinfra](../apinfra) — a GitOps agent that deploys docker-compose apps with Nginx and ACME certificates.
+End-to-end tests for [apinfra](https://github.com/uservseatb/apinfra) — a GitOps agent that deploys docker-compose apps with Nginx and SSL certificates.
 
 This repo does **not** contain the agent source. It runs the compiled `apinfra` binary against real Git, Docker, Nginx, and local ACME stubs (Pebble / rate-limit), using [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scenarios.
 
