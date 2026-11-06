@@ -43,6 +43,9 @@ Proxy conf write / restore / port TLS.
 | `nginx_conf_rollback.txt` | Failed ACME after conf rewrite restores prior nginx conf |
 | `port_mock_https.txt` | `inbound.port` + `cert-issue-type: mock` → `listen … ssl` + `mockcerts/port-<port>/` |
 | `domain_http_none.txt` | Domain + `cert-issue-type: none` → plain HTTP `:80`, no TLS/redirect; `.installedCert` → `none` |
+| `domain_prod_switch_fail_keeps_proxy.txt` | Prod domain A live (curl); switch to B + non-429 ACME fail → block B, rollback conf A, curl A still OK |
+| `proxy_stops_after_project_removed.txt` | Remove project from settings → down + conf gone; curl old port fails, sibling port still OK |
+| `proxy_stops_after_project_disabled.txt` | `enabled: false` → down + conf gone; curl old port fails, sibling port still OK |
 
 ### `certs/` — Certificates / ACME
 

@@ -1,0 +1,142 @@
+# Scenario: working prod domain stays live when settings switch to a new domain
+# whose ACME fails (non-429) → .retries block + nginx conf rolled back.
+#
+# Mirrors: dig returns some IP (registrar parking) with no certs.publicIP, so
+# DNS preflight passes; ACME challenge/CA then fails → block, not skip.
+# Cycle 1 issues prod for domain A (Pebble); cycle 2 points ACME at a dead
+# directory and changes domain-name to B.
+
+pebble-start
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: prod domain A baseline'
+cd ..
+
+cp .apinfra.pebble .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+chmod 0755 bin/dig
+env PATH=$WORK/bin:$PATH
+
+# --- Cycle 1: domain A + prod via Pebble ---
+exec apinfra
+stderr 'cert issued name=e2e-keep\.apinfra\.test mode=prod'
+stderr 'done duration='
+
+exists $HOME/infra/certbot/conf/live/e2e-keep.apinfra.test/fullchain.pem
+exists $HOME/infra/nginx/conf/dev_e2e-web.conf
+grep 'server_name e2e-keep\.apinfra\.test' $HOME/infra/nginx/conf/dev_e2e-web.conf
+grep 'listen 443 ssl' $HOME/infra/nginx/conf/dev_e2e-web.conf
+docker-assert-running apinfra_e2e-web-web-1
+
+# Live proxy healthcheck for domain A.
+exec curl -skf --resolve e2e-keep.apinfra.test:443:127.0.0.1 https://e2e-keep.apinfra.test/
+
+pebble-stop
+
+# Dig now returns a non-local "parking" IP; no certs.publicIP → preflight still OK.
+cp bin/dig.parking bin/dig
+chmod 0755 bin/dig
+
+cd git-repo
+cp ../settings.domain-b.yml dev/settings.yml
+exec git add dev/settings.yml
+exec git commit -m 'fix: switch to domain B without working ACME'
+cd ..
+
+cp .apinfra.fail .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+env PATH=$WORK/bin:$PATH
+
+# --- Cycle 2: domain B ACME fails → block B, restore conf for A ---
+exec apinfra
+stderr 'cert issuance failed'
+stderr 'cert issue blocked domain=e2e-bad\.apinfra\.test'
+stderr 'rolled back those service confs'
+stderr 'done duration='
+
+grep 'blocked: true' $HOME/.retries
+grep 'e2e-bad\.apinfra\.test' $HOME/.retries
+grep 'cert_issue_failed' $HOME/.events
+! exists $HOME/.downgradeCertMode
+! exists $HOME/infra/certbot/conf/live/e2e-bad.apinfra.test/fullchain.pem
+
+# Previous prod conf / cert for A must still be what nginx serves.
+grep 'server_name e2e-keep\.apinfra\.test' $HOME/infra/nginx/conf/dev_e2e-web.conf
+! grep 'server_name e2e-bad\.apinfra\.test' $HOME/infra/nginx/conf/dev_e2e-web.conf
+grep 'e2e-keep\.apinfra\.test=.*\|prod' $HOME/.installedCert
+exists $HOME/infra/certbot/conf/live/e2e-keep.apinfra.test/fullchain.pem
+docker-assert-running apinfra_e2e-web-web-1
+
+exec curl -skf --resolve e2e-keep.apinfra.test:443:127.0.0.1 https://e2e-keep.apinfra.test/
+
+-- .apinfra.pebble --
+namespace=dev
+repoBranch=main
+certs.provider=zerossl
+certs.zerossl.AcmeKid=kid-1
+certs.zerossl.AcmeHmac=zWNDZM6eQGHWpSRTPal5eIUYFTu7EajVIoguysqZ9wG44nMEtx3MUAsUDkMTQ12W
+certs.zerossl.directory=https://127.0.0.1:14000/dir
+certs.letsencrypt.directory=https://127.0.0.1:14000/dir
+certs.letsencrypt.stagingDirectory=https://127.0.0.1:14000/dir
+
+-- .apinfra.fail --
+namespace=dev
+repoBranch=main
+certs.triesCount=1
+certs.blockHours=24
+certs.provider=letsencrypt
+certs.letsencrypt.directory=https://127.0.0.1:1/directory
+certs.letsencrypt.stagingDirectory=https://127.0.0.1:1/directory
+certIssueTimeout=10s
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        domain-name: e2e-keep.apinfra.test
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: prod
+      cert-acme-email: e2e@apinfra.local
+
+-- settings.domain-b.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        domain-name: e2e-bad.apinfra.test
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: prod
+      cert-acme-email: e2e@apinfra.local
+
+-- git-repo/dev/e2e-web/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+
+-- bin/dig --
+#!/bin/sh
+echo '127.0.0.1'
+
+-- bin/dig.parking --
+#!/bin/sh
+# Non-empty answer that is not the e2e host (registrar parking stand-in).
+echo '203.0.113.10'
+
+-- .env --
