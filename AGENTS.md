@@ -8,7 +8,7 @@ Standalone Go module (`apinfra_e2e`) that drives the compiled `apinfra` binary t
 
 It does **not** contain the agent source. Product code lives in `../apinfra`. This suite exercises real Git, Docker, Nginx (via the agent), and ACME (Pebble / local 429 stub).
 
-`README.md` is the **product** README (kept in sync with `../apinfra`). Treat it as the behavior contract when writing or planning scenarios. The inventory of implemented E2E scenarios lives only in [`E2E_SCENARIOS.md`](E2E_SCENARIOS.md) — never in `README.md`.
+`testdata/README.md` is the **product** README (kept in sync with `../apinfra`). Treat it as the behavior contract when writing or planning scenarios. The root [`README.md`](README.md) describes this e2e repo for humans. The inventory of implemented E2E scenarios lives only in [`E2E_SCENARIOS.md`](E2E_SCENARIOS.md) — never in either README.
 
 ## Prerequisites
 
@@ -20,7 +20,7 @@ It does **not** contain the agent source. Product code lives in `../apinfra`. Th
 
 Requires [go-task](https://taskfile.dev) (`brew install go-task`) and Docker. Run from this repository root.
 
-E2E runs inside **privileged Ubuntu DinD** (`run.sh` → nested `dockerd`) so host `:80`/`:443` do not collide with `apinfra-proxy`.
+E2E runs inside **privileged Ubuntu DinD** (`env/run.sh` → nested `dockerd`) so host `:80`/`:443` do not collide with `apinfra-proxy`.
 
 ```bash
 task e2e     # build DinD image, run privileged container, go test inside
@@ -37,20 +37,19 @@ Do not commit `bin/apinfra` (see `.gitignore`). Do not vendor.
 ## Layout
 
 ```text
-main_test.go          # TestE2e<Theme> per testdata/<theme>/ + PATH/HOME setup
-postinst_setup.go     # mirrors .deb postinst home layout under $WORK
-docker_assert.go      # docker-assert-* custom commands
-pebble.go             # pebble-start / pebble-stop
-acme_ratelimit.go     # acme-ratelimit-start / stop (always-429 ACME stub)
+e2e/                  # package e2e_tests — TestE2e<Theme> per testdata/<theme>/
+env/                  # package env — Setup / Cmds / RunTheme + DinD runner
 testdata/<theme>/     # theme folders (one level); one scenario per *.txt archive
+testdata/README.md    # product README (behavior contract; sync from ../apinfra)
+README.md             # human overview of this e2e repo
 E2E_SCENARIOS.md      # inventory of implemented scenarios (source of truth)
 fixtures/             # pebble EAB config, minica PEMs, deb examples
 bin/apinfra           # Linux binary under test (not in git; supply before e2e)
-Dockerfile            # Ubuntu + Docker CE + Go image for DinD
-entrypoint.sh         # nested dockerd → go test
-run.sh                # docker build + privileged docker run
 Taskfile.yml          # e2e / check / fmt / vet
 ```
+
+
+
 
 ## Scenario layout (`testdata/`)
 
@@ -59,35 +58,35 @@ Scenarios live in **theme subdirectories** — exactly one level: `testdata/<the
 - **No** scripts at `testdata/` root.
 - **No** nested theme folders (`testdata/a/b/…`); only one level of themes.
 - Prefer a **small set of broad themes** over many tiny folders. Reuse an existing theme when the behavior fits; add a new theme only when a cluster of scenarios would clearly belong together.
-- Each theme has a dedicated `TestE2e<Theme>` in `main_test.go` with `Dir: "testdata/<theme>"`. Current themes:
+- Each theme has a dedicated `e2e/<theme>_test.go` (`package e2e_tests`) with `TestE2e<Theme>` via `env.RunTheme`. Current themes:
 
-| Theme | Test | Focus |
-|-------|------|--------|
-| `cycle/` | `TestE2eCycle` | Agent cycle: first deploy, idempotent re-run, validation soft-fail |
-| `docker/` | `TestE2eDocker` | Compose/Docker apply: ports, `network_mode`, heal, enable/disable projects |
-| `nginx/` | `TestE2eNginx` | Nginx proxy conf write / rollback |
-| `certs/` | `TestE2eCerts` | Certificate issuance: ACME, fallback, downgrade, retries, DNS preflight |
+| Theme | Test file | Test | Focus |
+|-------|-----------|------|--------|
+| `cycle/` | `e2e/cycle_test.go` | `TestE2eCycle` | Agent cycle: first deploy, idempotent re-run, validation soft-fail |
+| `docker/` | `e2e/docker_test.go` | `TestE2eDocker` | Compose/Docker apply: ports, `network_mode`, heal, enable/disable projects |
+| `nginx/` | `e2e/nginx_test.go` | `TestE2eNginx` | Nginx proxy conf write / rollback |
+| `certs/` | `e2e/certs_test.go` | `TestE2eCerts` | Certificate issuance: ACME, fallback, downgrade, retries, DNS preflight |
 
-When adding a scenario, place it under the matching theme. If none fit and the new area is substantial, introduce a new top-level theme, add `TestE2e<Theme>` in `main_test.go`, and document it here and in `E2E_SCENARIOS.md` in the same change.
+When adding a scenario, place it under the matching theme. If none fit and the new area is substantial, introduce a new top-level theme, add `e2e/<theme>_test.go` with `TestE2e<Theme>`, and document it here and in `E2E_SCENARIOS.md` in the same change.
 
 ## Scenario inventory & workflow
 
-**`README.md` is never edited for scenarios.** Product README mirrors `../apinfra`. Do not append scenario lists, planned gaps, or e2e notes to it.
+**Root `README.md` and `testdata/README.md` are never edited for scenarios.** Product README (`testdata/README.md`) mirrors `../apinfra`. Do not append scenario lists, planned gaps, or e2e notes to either README.
 
 **`E2E_SCENARIOS.md` is the only inventory.** Keep every implemented `testdata/<theme>/*.txt` listed there (path + short coverage blurb), grouped by theme. When you add or remove a scenario file, update this inventory in the same change.
 
 ### When the user asks to invent / suggest a scenario
 
-1. Read `README.md` (behavior contract) and `E2E_SCENARIOS.md` (what already exists).
-2. Pick a README-promised behavior that is **not** yet covered in `E2E_SCENARIOS.md`.
+1. Read `testdata/README.md` (behavior contract) and `E2E_SCENARIOS.md` (what already exists).
+2. Pick a product-README-promised behavior that is **not** yet covered in `E2E_SCENARIOS.md`.
 3. Implement it as `testdata/<theme>/<name>.txt` following the conventions below.
 4. Add a row for it in `E2E_SCENARIOS.md` under the right theme.
 5. **Do not run** the scenario (`task e2e`, `go test`, DinD, etc.). The user runs tests themselves.
 
 ### When the user asks to add a specific scenario
 
-1. Check the request against `README.md` first.
-2. If the requested behavior **disagrees** with the README (wrong effect, undocumented detail, contradicts soft-fail / events / cert rules, etc.): stop, explain the mismatch, and agree on the scenario in dialogue before writing files.
+1. Check the request against `testdata/README.md` first.
+2. If the requested behavior **disagrees** with the product README (wrong effect, undocumented detail, contradicts soft-fail / events / cert rules, etc.): stop, explain the mismatch, and agree on the scenario in dialogue before writing files.
 3. Once aligned: implement `testdata/<theme>/<name>.txt`, update `E2E_SCENARIOS.md`, and stop.
 4. **Do not run** the scenario yourself.
 
@@ -117,8 +116,8 @@ Each `testdata/<theme>/<name>.txt` is a testscript archive:
 - Keep scenarios focused (one behavior). Reuse the alpine/`nc` HTTP stub pattern from existing files.
 - ACME domain scenarios need DNS preflight: ship a tiny `bin/dig` stub and `chmod 0755` + prepend `PATH`.
 - Always stop Pebble / rate-limit servers started in the script (`pebble-stop`, `acme-ratelimit-stop`).
-- Match product behavior from `README.md` (validation soft-fail, cert rollback, port strip/rewrite, events). Do not assert implementation details that the README does not promise.
-- Change only what the task needs; no drive-by refactors of shared harness code unless required by the new scenario.
+- Match product behavior from `testdata/README.md` (validation soft-fail, cert rollback, port strip/rewrite, events). Do not assert implementation details that the product README does not promise.
+- Change only what the task needs; no drive-by refactors of `env/` unless required by the new scenario.
 - In `stderr` / `stdout` patterns, avoid unescaped regex metacharacters (especially `(` `)` `.`) unless intentional — testscript matches as regexp.
 
 ## Commits
@@ -135,6 +134,6 @@ When the user asks to create a git commit, follow common open-source practices (
 
 ## Agent behavior
 
-- After harness Go changes: `go fmt ./...`. Do **not** run the e2e suite unless the user asks.
+- After `e2e/` or `env/` Go changes: `go fmt ./...`. Do **not** run the e2e suite unless the user asks.
 - Never commit secrets, real registry tokens, or live ACME credentials — fixtures use local Pebble EAB / stub directories only.
-- Do not add Markdown docs the user did not ask for. Scenario inventory updates go only to `E2E_SCENARIOS.md` (never `README.md`).
+- Do not add Markdown docs the user did not ask for. Scenario inventory updates go only to `E2E_SCENARIOS.md` (never root or `testdata/README.md`).

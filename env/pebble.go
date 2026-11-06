@@ -1,4 +1,4 @@
-package e2e_test
+package env
 
 import (
 	"crypto/tls"
@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -210,12 +209,12 @@ func waitPebbleReady() error {
 }
 
 func e2eFixturesDir() (string, error) {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", errors.New("runtime.Caller failed for pebble helper")
+	root, err := repoRoot()
+	if err != nil {
+		return "", err
 	}
 
-	dir := filepath.Join(filepath.Dir(file), "fixtures")
+	dir := filepath.Join(root, "fixtures")
 	info, err := os.Stat(dir)
 	if err != nil {
 		return "", fmt.Errorf("fixtures dir %s: %w", dir, err)

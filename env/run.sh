@@ -11,10 +11,11 @@
 #   task sync   # Linux apinfra binary into bin/ (GOOS=linux cross-compile)
 #
 # Usage (from repo root, or via: task e2e):
-#   ./run.sh
+#   ./env/run.sh
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ENVDIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "${ENVDIR}/.." && pwd)"
 cd "${ROOT}"
 
 if [[ ! -f bin/apinfra ]]; then
@@ -42,9 +43,9 @@ echo "apinfra-e2e: building ${IMAGE_NAME} (GO_VERSION=${GO_VERSION} TARGETARCH=$
 docker build \
 	--build-arg "GO_VERSION=${GO_VERSION}" \
 	--build-arg "TARGETARCH=${TARGETARCH}" \
-	-f Dockerfile \
+	-f "${ENVDIR}/Dockerfile" \
 	-t "${IMAGE_NAME}" \
-	.
+	"${ENVDIR}"
 
 # Do not publish 80/443 to the Mac/Linux host — they stay inside nested dockerd.
 # Source mount keeps iteration fast without rebuilding the image for code changes.

@@ -14,7 +14,7 @@ tasks:
   e2e:
     desc: Run e2e tests in privileged Ubuntu DinD (isolates host :80/:443)
     cmds:
-      - bash ./run.sh
+      - bash ./env/run.sh
 
   test:
     desc: Alias for e2e (DinD)

@@ -1,4 +1,4 @@
-package e2e_test
+package env
 
 import (
 	"errors"
@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 
 	"github.com/rogpeppe/go-internal/testscript"
 )
@@ -88,12 +87,12 @@ func setupPostinstHome(homeDir string) error {
 }
 
 func debExamplesDir() (string, error) {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", errors.New("runtime.Caller failed for e2e test file")
+	root, err := repoRoot()
+	if err != nil {
+		return "", err
 	}
 
-	dir := filepath.Join(filepath.Dir(file), debExamplesRelPath)
+	dir := filepath.Join(root, debExamplesRelPath)
 
 	info, err := os.Stat(dir)
 	if err != nil {

@@ -2,7 +2,7 @@
 
 Inventory of black-box scenarios in `testdata/<theme>/*.txt` ([testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) archives against a local `file://` config Git repo and `bin/apinfra`).
 
-This file is the **only** scenario inventory. Do not maintain a parallel list in `README.md`.
+This file is the **only** scenario inventory. Do not maintain a parallel list in root `README.md` or `testdata/README.md`.
 
 Themes are **one level** under `testdata/` (no nested theme folders). See `AGENTS.md` for naming and placement rules.
 

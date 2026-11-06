@@ -1,4 +1,4 @@
-package e2e_test
+package env
 
 import (
 	"fmt"
@@ -9,47 +9,27 @@ import (
 	"github.com/rogpeppe/go-internal/testscript"
 )
 
-func TestE2eCycle(t *testing.T) {
+// RunTheme runs testscript scenarios under testdata/<theme> (module root).
+func RunTheme(t *testing.T, theme string) {
+	t.Helper()
+
+	root, err := repoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	testscript.Run(t, testscript.Params{
-		Dir:   "testdata/cycle",
-		Setup: setup(),
+		Dir:   filepath.Join(root, "testdata", theme),
+		Setup: setup(root),
 		Cmds:  commands,
 	})
 }
 
-func TestE2eDocker(t *testing.T) {
-	testscript.Run(t, testscript.Params{
-		Dir:   "testdata/docker",
-		Setup: setup(),
-		Cmds:  commands,
-	})
-}
-
-func TestE2eNginx(t *testing.T) {
-	testscript.Run(t, testscript.Params{
-		Dir:   "testdata/nginx",
-		Setup: setup(),
-		Cmds:  commands,
-	})
-}
-
-func TestE2eCerts(t *testing.T) {
-	testscript.Run(t, testscript.Params{
-		Dir:   "testdata/certs",
-		Setup: setup(),
-		Cmds:  commands,
-	})
-}
-
-func setup() func(env *testscript.Env) error {
+func setup(root string) func(env *testscript.Env) error {
 	return func(env *testscript.Env) error {
 		env.Setenv("HOME", env.WorkDir)
 
-		localBinDir, err := filepath.Abs("bin")
-		if err != nil {
-			return fmt.Errorf("resolve bin dir: %w", err)
-		}
-
+		localBinDir := filepath.Join(root, "bin")
 		binPath := filepath.Join(localBinDir, "apinfra")
 		if _, err := os.Stat(binPath); err != nil {
 			if os.IsNotExist(err) {
