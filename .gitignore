@@ -1,4 +1,4 @@
 # Keep bin/ in git, ignore the real binary placed there manually.
 /bin/
-build.sh
+sync.sh
 .idea
