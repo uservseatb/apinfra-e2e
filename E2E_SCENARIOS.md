@@ -33,15 +33,16 @@ Ports, `network_mode`, healing, enabling/disabling projects.
 
 ### `nginx/` — Nginx config
 
-Proxy conf write / restore.
+Proxy conf write / restore / port TLS.
 
 | File | Covers |
 |------|--------|
 | `nginx_conf_rollback.txt` | Failed ACME after conf rewrite restores prior nginx conf |
+| `port_mock_https.txt` | `inbound.port` + `cert-issue-type: mock` → `listen … ssl` + `mockcerts/port-<port>/` |
 
 ### `certs/` — Certificates / ACME
 
-Issue, fallback, downgrade, retries, DNS preflight.
+Issue, fallback, downgrade, retries, DNS preflight, mock self-signed.
 
 | File | Covers |
 |------|--------|
@@ -50,3 +51,4 @@ Issue, fallback, downgrade, retries, DNS preflight.
 | `acme_le_zerossl_fallback.txt` | LE 429 → ZeroSSL (Pebble) secondary keeps prod (no downgrade) |
 | `cert_issue_failed.txt` | Non–rate-limit ACME fail → `.retries` block + `cert_issue_failed`; next cycle skips CA |
 | `dns_preflight_skip.txt` | Empty `dig +short` skips ACME for the cycle (no retry / downgrade / `.installedCert`) |
+| `mock_domain_cert.txt` | Domain + `mock` → local PEMs under `mockcerts/<domain>/` (no ACME); nginx HTTPS |

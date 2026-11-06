@@ -1,0 +1,53 @@
+# Scenario: inbound.port + cert-issue-type mock → self-signed HTTPS on that host
+# port (PEMs under mockcerts/port-<port>/; nginx listen … ssl).
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: port mock https fixture'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'cert issued name=port-8443 mode=mock'
+stderr 'done duration='
+
+exists $HOME/infra/mockcerts/port-8443/fullchain.pem
+exists $HOME/infra/mockcerts/port-8443/privkey.pem
+
+exists $HOME/infra/nginx/conf/dev_e2e-web.conf
+grep 'listen 8443 ssl' $HOME/infra/nginx/conf/dev_e2e-web.conf
+grep '/etc/nginx/mockcerts/port-8443/fullchain\.pem' $HOME/infra/nginx/conf/dev_e2e-web.conf
+! grep 'listen 8443;' $HOME/infra/nginx/conf/dev_e2e-web.conf
+
+docker-assert-running apinfra_e2e-web-web-1
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        port: 8443
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: mock
+
+-- git-repo/dev/e2e-web/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+
+-- .env --
