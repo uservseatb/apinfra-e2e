@@ -1,0 +1,55 @@
+# Scenario: proxy.target.service-name may match compose container_name; runtime
+# name is still compose-project based (container_name is stripped before start).
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: container_name as proxy target'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'done duration='
+
+docker-assert-running apinfra_e2e-web-web
+# Fixed container_name must not appear as the Docker Name.
+exec sh -c '! docker ps -a --format "{{.Names}}" | grep -qx fixed-e2e-web'
+
+exists $HOME/infra/nginx/conf/dev_e2e-web.conf
+# Nginx reaches YAML service key on apinfra_proxy_net, not the stripped container_name.
+grep 'web\.apinfra_e2e-web' $HOME/infra/nginx/conf/dev_e2e-web.conf
+! grep 'fixed-e2e-web' $HOME/infra/nginx/conf/dev_e2e-web.conf
+
+exists $HOME/infra/apps/e2e-web/docker-compose.yml
+! grep 'container_name' $HOME/infra/apps/e2e-web/docker-compose.yml
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        port: 9999
+      target:
+        service-name: fixed-e2e-web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-web/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    container_name: fixed-e2e-web
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+
+-- .env --
