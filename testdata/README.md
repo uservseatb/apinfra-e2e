@@ -35,7 +35,17 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 ## Get Started
 
-First, install the **apinfra** package on your target server. There are two options:
+### 1. System Requirements
+
+To deploy `apinfra`, you need a **clean Linux virtual machine or bare-metal server** that meets the following criteria:
+
+* **OS:** Ubuntu 22.04 LTS (or newer).
+* **Hardware:**
+    * 1 vCPU and 512 MB RAM minimum.
+    * *Note: A 1 GB+ Swap file is strictly required if running on 512 MB RAM.*
+* **Network:** Persistent outbound internet access (required to fetch Git repositories and Docker images).
+
+### 2. Installation
 
 ### Option 1: Fast Installation via GitHub Releases (Recommended)
 
