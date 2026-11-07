@@ -58,6 +58,7 @@ Issue, fallback, downgrade, retries, DNS preflight, mock self-signed.
 | `acme_le_zerossl_fallback.txt` | LE 429 → ZeroSSL (Pebble) secondary keeps prod (no downgrade) |
 | `cert_issue_failed.txt` | Non–rate-limit ACME fail → `.retries` block + `cert_issue_failed`; next cycle skips CA |
 | `dns_preflight_skip.txt` | Empty `dig +short` skips ACME for the cycle (no retry / downgrade / `.installedCert`) |
+| `dns_preflight_public_ip.txt` | Configured `certs.publicIP` matches or mismatches dig IP -> pass or skip cycle |
 | `mock_domain_cert.txt` | Domain + `mock` → local PEMs under `mockcerts/<domain>/` (no ACME); nginx HTTPS |
 
 ### `env/` — Host / project environment
