@@ -32,6 +32,7 @@ Ports, `network_mode`, healing, enabling/disabling projects.
 | `project_disabled_downs.txt` | Two projects; `enabled: false` → `compose down` for that app; sibling stays running |
 | `worker_no_proxy.txt` | Project with no `proxy` still runs; no nginx conf; sibling with proxy keeps routing |
 | `container_name_target.txt` | `proxy.target.service-name` matches `container_name`; name stripped at runtime; nginx uses YAML service DNS |
+| `service_name_target.txt` | `proxy.target.service-name` matches YAML compose service key; nginx DNS `<service_key>.apinfra_<project>`; curl OK |
 | `no_new_privileges.txt` | Started containers get `security_opt: no-new-privileges:true` |
 
 ### `nginx/` — Nginx config
