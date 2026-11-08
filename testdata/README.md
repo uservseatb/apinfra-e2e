@@ -4,19 +4,19 @@
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
-## Why apinfra? (The Webhookless GitOps Approach)
+## Why apinfra?
 
-* **Lightweight:** Unlike heavy-weight self-hosted PaaS solutions, **apinfra** needs no web UI on the server and adds no web-server overhead — so practically all RAM and CPU stay available for your applications.
-* **Pull model:** The agent fetches configuration from Git itself, so you do not open inbound management ports, webhooks, or panels — day-to-day management goes through the configuration Git repository; no server login is required for ongoing operations.
+* **Lightweight:** Unlike heavy-weight self-hosted PaaS solutions, **apinfra** needs no web UI and keeps no running backend for a control panel — so practically all RAM and CPU stay available for your applications.
+* **Webhookless GitOps (Pull Model):** The agent fetches configuration from Git itself, so you do not open inbound management ports, webhooks, or panels — day-to-day management goes through the configuration Git repository; no server login is required for ongoing operations.
 * **Single source of truth in Git:** All settings, routes, and application configs live in one Git repository. That lets you bring up any server in the desired configuration in minutes and gives you the full GitOps toolkit — version history, reviews, rollbacks, and reproducible deploys.
 
 
 ## Key Features
 
 * **GitOps Pull Workflow:** Desired server state lives in the configuration Git repository (`settings.yml` + compose files); the host periodically **pulls** and applies it.
-* **Multiple Compose Files:** Ability to deploy several independent apps from one config repository — each with its own `docker-compose.yml` (and optional `.env`), plus shared `settings.yml`, with Nginx routing and Let's Encrypt / ZeroSSL TLS on the host.
-* **Automatic SSL:** Let's Encrypt / ZeroSSL certificate management.
-* **Nginx Reverse Proxy:** Routes public domains (HTTPS/HTTP) or host ports (HTTP, or HTTPS with mock self-signed certs) to containers by Docker DNS name and target port.
+* **Multiple Compose Files:** Ability to deploy several independent apps from one config repository — each with its own `docker-compose.yml` and optional `.env`.
+* **Automatic SSL:** apinfra issues and renews Let's Encrypt / ZeroSSL (or mock) certificates; modes (`mock` / `prod` / `test` / `none`) are declared per project in `settings.yml`.
+* **Nginx Reverse Proxy:** Per-project inbound rules in `settings.yml` route public domains (HTTPS/HTTP) or host ports (HTTP, or HTTPS with mock self-signed certs) to containers by Docker DNS name and target port.
 * **Port / host-network exposure guard:** By default, all `ports` mappings and any `network_mode: host` in docker-compose are stripped, so containers are not accidentally published on the host network stack; public access goes only through the managed Nginx routes. When needed, you can still configure port forwarding bound to a specific IP (`allow-ports-mapping: true`).
 * **Lightweight & Fast:** Built with Go — minimal overhead, low memory footprint, and fast execution.
 
@@ -43,13 +43,13 @@ To deploy `apinfra`, you need a **clean Linux virtual machine or bare-metal serv
 * **Hardware:**
     * 1 vCPU and 512 MB RAM minimum.
     * *Note: A 1 GB+ Swap file is strictly required if running on 512 MB RAM.*
-* **Network:** Persistent outbound internet access (required to fetch Git repositories and Docker images).
+* **Network:** Persistent internet access (required to fetch Git repositories and Docker images).
 
 ### 2. Installation
 
 ### Option 1: Fast Installation via GitHub Releases (Recommended)
 
-Connect to your clean Linux server (Ubuntu/Debian) via SSH and execute the following commands:
+Connect to your clean Linux server (Ubuntu) via SSH and execute the following commands:
 
 ```bash
 # 1. Download the latest package version
@@ -105,7 +105,7 @@ By default, immediately after installation, the agent safely provisions an initi
 Wait about 10–15 seconds for the containers to spin up, then open your browser at:
 
 ```text
-http://<YOUR_SERVER_IP>:3000
+http://<YOUR_SERVER_IP>:3333
 ```
 
 If the default **apinfra-demo** page loads successfully, it means the agent, Nginx reverse proxy, and the demo container are fully operational.
@@ -176,7 +176,7 @@ prod/
 > [!NOTE]
 > Environment folders (`dev`, `prod`, etc.) must sit directly at the **root** of the configuration repository.
 
-Each project folder (e.g. `storefront/`, `dashboard/`, `secure-api/`, `worker/`) is **one project** and must match a `projects[].name` entry in `settings.yml`. Inside the folder: `docker-compose.yml` and an optional `.env`. The `proxy.target` block in `settings.yml` points at a service in that compose file — the service that listens on the declared container port.
+Each project folder (e.g. `storefront/`, `dashboard/`, `secure-api/`, `worker/`) is **one project** and must match a `projects[].name` entry in `settings.yml`. Inside the folder are `docker-compose.yml` and an optional `.env`. The `proxy.target` block in `settings.yml` points at a service in that compose file — the service that listens on the declared container port.
 
 ##### `settings.yml` Example
 
@@ -272,10 +272,9 @@ services:
     restart: unless-stopped
 ```
 
-> [!NOTE]
-> Before starting a stack, the agent always strips `container_name` from every service so host uniqueness comes from the Compose project name (`apinfra_<project>`). You may still set `container_name` in the config-repo compose file so `proxy.target.service-name` can match it (or the YAML service key); runtime DNS on `apinfra_proxy_net` is `<service_key>.apinfra_<project>`.
-
 #### 2. Private Container Registry Settings (Docker)
+
+If your compose files use public images exclusively, leave these three registry fields empty — the agent skips `docker login` and continues without failing.
 
 <table>
 <thead>
@@ -301,7 +300,7 @@ services:
 </table>
 
 > [!NOTE]
-> Currently, `apinfra` supports authentication for **only one** private Docker registry. If your compose files use public images exclusively, leave these three registry fields empty — the agent skips `docker login` and continues without failing.
+> Currently, `apinfra` supports authentication for **only one** private Docker registry.
 
 ---
 
@@ -310,7 +309,7 @@ services:
 You can inject host-specific environment variables or production secrets directly into your projects' containers from this file.
 
 * **Crucial Rule:** Any environment variable intended for a specific application inside your compose files **must be prefixed with the project's name** (converted to uppercase) followed by an underscore. The prefix is stripped before compose interpolation, so the project's `docker-compose.yml` and its `.env` in the config repository use the **unprefixed** name.
-* *Example:* If your project is named `storefront` in `settings.yml`, and you want to pass a database host variable, you must declare it in this file as `STOREFRONT_DB_HOST=your-host-value`.
+* *Example:* If your project is named `storefront` in `settings.yml`, and you want to pass a database password, you must declare it in this file as `STOREFRONT_DB_PASSWORD=supersecret`.
 * If the same variable is also defined in the project's `.env` inside the configuration repository, the value from `/home/ap/.env` on the host **overrides** it.
 
 ```yaml
@@ -358,15 +357,17 @@ Drop `-f` to print recent logs without following, or add `-n 200` to limit the o
 
 ### Security Design & Trade-offs (Pragmatic Isolation)
 
-**apinfra** focuses on a pragmatic approach to security, balancing strong host-level protection with high operational stability for startups and MVP environments.
+**apinfra** focuses on a pragmatic approach to security: strong host-level protection with high operational stability for startups and MVPs.
 
 * **Layered Network Isolation:** Projects are strictly separated into independent `<project>_net` bridge networks. Databases and internal services stay reachable only inside Docker networks — they are not published on the host.
-* **Single Shared Proxy Net:** To keep the Nginx proxy up and avoid restarting it on every deploy cycle, all public-facing services share one `apinfra_proxy_net`. This assumes all apps on the host belong to the same trusted tenant.
-* **Zero Web UI Attack Surface:** No web admin panel or open management API on the internet — the agent only pulls configuration locally.
-* **Strict Port Mapping:** By default, any explicit `ports:` mappings in the application's `docker-compose.yml` are automatically stripped before the stack is started, ensuring no accidental database or service exposure via the host network stack. If a project genuinely requires host port publishing, set `config.allow-ports-mapping: true` in `settings.yml`. Then mappings without a host IP are bound to `127.0.0.1`; mappings that already include a host IP are kept as written — except unspecified addresses `0.0.0.0` / `::`, which are rejected.
-* **Host-Network Control:** Any `network_mode: host` in the application's `docker-compose.yml` is always stripped before the stack is started — there is no opt-in — so stacks stay on bridge networks (`<project>_net` / `apinfra_proxy_net`).
-* **Container Name Control:** Any `container_name` in the application's `docker-compose.yml` is always stripped before the stack is started. Fixed names collide across projects; uniqueness comes from Compose project `-p apinfra_<name>`. `proxy.target.service-name` may still match the original `container_name` or the YAML service key when resolving the proxy target (matching runs before the strip).
-* **Privilege Escalation Protection:** Every container is started with `no-new-privileges: true`. This prevents processes inside the container from gaining new privileges (e.g., via setuid/setgid binaries) after startup. Even if a container runs as root internally to initialize services or bind ports, this layer protects the host system by blocking runtime privilege escalation exploits and container escape vectors.
+* **Single Shared Proxy Net:** To avoid restarting the Nginx proxy on every project routing change, all public-facing services share one `apinfra_proxy_net`. This design assumes all apps on the host belong to the same trusted boundary (tenant).
+* **Zero Web UI Attack Surface:** There is no web admin panel and no open management ports on the internet — the agent works exclusively in a pull model and fetches configuration locally.
+* **Strict Port Mapping:** By default, any `ports:` mappings in `docker-compose.yml` are automatically removed before start — this prevents accidental exposure of databases or internal services to the internet. If a project genuinely needs to publish ports on the server, set `config.allow-ports-mapping: true` in `settings.yml`. The agent then applies the following rules:
+    * Plain port mappings (e.g. `"8080:80"`) are automatically bound to `127.0.0.1` (reachable only on the server itself).
+    * Mappings that explicitly specify a concrete host network-interface IP (e.g. `"192.168.1.100:8080:80"`) are kept as written.
+    * Attempts to open ports to the world via public addresses `0.0.0.0` or `::` (e.g. `"0.0.0.0:8080:80"`) are fully rejected by the agent, and the deploy cycle stops with an error.
+* **Host-Network Control:** Any use of `network_mode: host` in the application's `docker-compose.yml` is forcibly removed before start. This option is fully blocked for security — all projects must stay on isolated bridge networks.
+* **Privilege Escalation Protection:** Every container is started with `no-new-privileges: true`. This forbids processes inside the container from gaining new privileges after startup (e.g. via setuid/setgid binaries). Even if the application inside the container initializes as root, this layer protects the host from runtime exploits and container-escape attempts.
 
 ### Project `.env` and Variable Normalization
 Each project folder may include an optional `.env` next to its `docker-compose.yml`. In that file you can use a dot-separated "Java-style" notation. Before evaluating the variables, the agent **normalizes** them: it replaces dots with underscores and converts strings to uppercase.
@@ -381,42 +382,46 @@ Your `docker-compose.yml` must reference the normalized key format:
 image: ghcr.io/example/storefront-web:${WEB_IMAGE_TAG}
 ```
 
-### Certificate issuance
+### Certificate issuance and renewal
 
-State files under `/home/ap/`:
+**apinfra** automatically manages SSL certificates for all projects configured with `domain-name` routing. The agent aims to minimize requests to external ACME providers (Let's Encrypt / ZeroSSL) and keep routing working even under network failures or hard CA rate limits.
 
-| File | Role |
-|------|------|
-| `/home/ap/.installedCert` | Last **successful** issue (domain → time\|mode). Updated only after a successful issuance. |
-| `/home/ap/.downgradeCertMode` | After ACME **rate limit** or failure of the other CA — temporary target mode (`prod`→`test`→`mock`→`none`) with an `until` timestamp. While active, overrides `cert-issue-type` from `settings.yml`. Expires automatically. Can also be useful while DNS is still being configured / propagating. |
-| `/home/ap/.retries` | Attempt counter for errors (not rate limit), plus `blocked` and `blocked_until`. |
+#### How the process works (lifecycle)
 
-Retry / block knobs in `.apinfra` (positive integers; defaults shown):
+1. **Issuance need check:** On every one-minute cycle the agent consults the local state file `.installedCert`. An ACME request is made only in three cases: the project has no certificate yet, the current certificate is about to expire, or `cert-issue-type` changed in `settings.yml`.
+2. **DNS preflight:** Before sending an ACME request for `prod` or `test`, the agent resolves the domain locally (`dig +short <domain>`).
+    * If the DNS record is not ready yet (empty answer) or a network error occurs, the agent simply **skips** that domain for this cycle. The error counter (`attempts`) is not increased and the mode is not downgraded. This avoids false blocks while the domain is still being delegated.
+    * If `certs.publicIP` is set, the agent also requires that IP to appear in the `dig` response.
+3. **Failure handling and Nginx protection:** If certificate issuance fails, **the rest of the deploy cycle is not aborted**. The agent restores that project's Nginx config from the pre-cycle snapshot. The previous working configuration keeps serving traffic.
+4. **ACME rate-limit response:** If the provider returns a rate-limit error (`urn:ietf:params:acme:error:rateLimited` / HTTP 429), the agent temporarily lowers the bar (downgrade). First it tries the alternate provider (for example Let's Encrypt → ZeroSSL when EAB is configured). If both fail, it writes event `cert_rate_limited` and for `certs.downgradeCertModeHours` (default 24 hours) moves the domain to a softer mode along `prod` → `test` → `mock` → `none`. In `mock` mode a local self-signed certificate is generated so Nginx can still start.
+5. **Block on persistent errors:** For ordinary non–rate-limit failures (timeouts, validation problems, etc.) the agent counts attempts in `.retries`. After `certs.triesCount` is reached, the domain is blocked for `certs.blockHours` (default 24 hours, `blocked_until`) to avoid spamming the network and give the operator time to fix the issue. The block can be cleared manually by deleting the domain entry from the file.
+
+#### Host state files
+
+To track status and stay idempotent, the agent uses files in the `ap` user's home directory (`/home/ap/`):
+
+| File | Description and role |
+| :--- | :--- |
+| `.installedCert` | Last **successful** issuance per domain as `domain → time\|mode`. Updated only after a successful certificate generation. |
+| `.downgradeCertMode` | Temporary forced mode (`prod`→`test`→`mock`→`none`) with an `until` timestamp. Created on ACME rate limit. While active it overrides `settings.yml`; after the TTL it clears itself. |
+| `.retries` | Internal counter of failed issuance attempts (non–rate-limit errors). Stores `attempts`, `blocked`, and `blocked_until`. |
+
+#### Issuance configuration (`.apinfra`)
+
+Issuance behavior and ACME CA selection can be configured in the host agent config. Per-project certificate **mode** (`cert-issue-type`, email, refresh interval) still lives in `settings.yml`. When `.apinfra` keys are omitted, safe defaults apply:
 
 | Property | Default | Description |
-|----------|---------|-------------|
-| `certs.triesCount` | `3` | Non–rate-limit failures before `blocked` (one attempt per agent cycle) |
-| `certs.blockHours` | `24` | Hours to keep `blocked` after `triesCount` |
-| `certs.rateLimitBlockHours` | `24` | Hours for mode downgrade after ACME rate limit / HTTP 429 |
-
-**DNS preflight** (hostname `prod`/`test` only): Before issuing a certificate via ACME, apinfra checks that the domain resolves on the host (`dig +short <domain>`). Empty answer → skip this cycle. If `certs.publicIP` is set, that IP must appear among dig's results; if unset, any resolved IP is enough. On failure, issuance is skipped for this cycle (no retry bump, no downgrade).
-
-**On any issuance failure for a domain:** the cycle does not abort. The previous nginx `conf.d` file for that service is restored from the pre-cycle snapshot when one existed; `.installedCert` for that domain is left unchanged. If there was no prior conf (first issue), nothing is restored and `.installedCert` is not created.
-
-**ACME rate limit** (`urn:ietf:params:acme:error:rateLimited` / HTTP 429):
-
-1. If ZeroSSL EAB credentials are also set in `.apinfra`, apinfra tries the **other** CA at the same mode before downgrading.
-2. If both providers fail at that mode (or only one CA is configured), event `cert_rate_limited` is written (`domain`, `from`, `to`).
-3. `.downgradeCertMode` is set to the next lower mode for `certs.rateLimitBlockHours` (`prod` → `test` → `mock` → `none`).
-4. The next timer run tries the downgraded mode (again with both providers when configured). `.installedCert` is updated only after a successful issue in that mode (`mock` is local self-signed and does not need ACME, so it usually succeeds). If issuance is still rate-limited at `mock`, the next step is temporary `none` (plain HTTP, no TLS) until the downgrade TTL expires.
-5. After `certs.rateLimitBlockHours` elapses, the downgrade mode expires and the mode from `settings.yml` is used again.
-
-**Any other issuance error:**
-
-1. `attempts` in `/home/ap/.retries` is incremented (one attempt per agent run).
-2. After `certs.triesCount` failures: `blocked: true`, `blocked_until` = now+`certs.blockHours`, and event `cert_issue_failed`.
-3. While blocked, apinfra **skips** further issue attempts for that domain.
-4. After `blocked_until`, the block clears automatically; you can also delete the domain entry under `certs:` in `.retries`.
+| :--- | :--- | :--- |
+| `certs.provider` | `letsencrypt` | Primary ACME CA: `letsencrypt` or `zerossl`. ZeroSSL as primary requires EAB credentials below. |
+| `certs.zerossl.AcmeKid` | — | ZeroSSL External Account Binding (EAB) key id. Required when `certs.provider=zerossl`. Obtain from the ZeroSSL panel. If set while the primary is Let's Encrypt, ZeroSSL is used as the rate-limit fallback CA before mode downgrade. |
+| `certs.zerossl.AcmeHmac` | — | ZeroSSL EAB HMAC key. Required together with `AcmeKid` when using ZeroSSL (primary or fallback). |
+| `certs.publicIP` | — | *Optional.* Expected public IP of the server. When set, local DNS preflight requires that exact IP among `dig` results. |
+| `certs.letsencrypt.directory` | `https://acme-v02.api.letsencrypt.org/directory` | *Optional.* Let's Encrypt production ACME directory URL (lego `CADirURL`). |
+| `certs.letsencrypt.stagingDirectory` | `https://acme-staging-v02.api.letsencrypt.org/directory` | *Optional.* Let's Encrypt staging ACME directory URL used for `cert-issue-type: test`. |
+| `certs.zerossl.directory` | `https://acme.zerossl.com/v2/DV90` | *Optional.* ZeroSSL ACME directory URL. |
+| `certs.triesCount` | `3` | Consecutive non–rate-limit failures before the domain becomes `blocked` (one increment per one-minute agent cycle). |
+| `certs.blockHours` | `24` | Hours the domain stays blocked (`blocked_until`) after `triesCount` is exhausted. |
+| `certs.downgradeCertModeHours` | `24` | How long the forced softer mode in `.downgradeCertMode` stays active after an ACME HTTP 429. |
 
 
 ## settings.yml Field Schema
@@ -493,7 +498,7 @@ Retry / block knobs in `.apinfra` (positive integers; defaults shown):
 </tr>
 <tr bgcolor="#f6f8fa">
 <td><code>proxy.target.service-name</code></td>
-<td><strong>Required</strong> when <code>proxy</code> is set. Matched against the YAML service key or <code>container_name</code> in the config-repo compose file (before the agent strips <code>container_name</code>). Nginx reaches the target as <code>&lt;service_key&gt;.apinfra_&lt;project&gt;</code> on <code>apinfra_proxy_net</code>.</td>
+<td><strong>Required</strong> when <code>proxy</code> is set. Must point to the service key in the project's <code>docker-compose.yml</code>. Inside the Nginx network the container is reached as <code>&lt;service_name&gt;.apinfra_&lt;project_name&gt;</code>.</td>
 </tr>
 <tr>
 <td><code>proxy.target.port</code></td>
@@ -585,12 +590,12 @@ Operational events are appended as JSON Lines to `~/.events` (for user `ap`: `/h
 |-------|------|--------|--------|
 | `git_login_failed` | Config-repo clone fails due to authentication/authorization (not network, missing branch, or timeout) | `repo` — clone URL | The **entire update cycle is aborted** — Docker and Nginx on the host are left untouched. Other clone failures also abort the cycle but do **not** write an event. |
 | `docker_login_failed` | `containerRegistryHost` / `containerRegistryUser` / `containerRegistryToken` are all set in `.apinfra`, a compose pull/up is needed this cycle, and `docker login` fails | `registry` — registry host | Compose files for this cycle may already be written; pull/up/down stop; **nginx and image prune are skipped**. Incomplete registry credentials skip login (no event, cycle continues). |
-| `cert_rate_limited` | ACME rate limit / HTTP 429 after both CAs fail at the current mode (or only one CA is configured) | `domain`, `from`, `to` — mode before/after downgrade | Sets `.downgradeCertMode` to the next lower mode for `certs.rateLimitBlockHours` (`prod`→`test`→`mock`→`none`). When the override is already `none`, Nginx serves plain HTTP and skips ACME for that domain until the TTL expires; other domains continue. |
+| `cert_rate_limited` | ACME rate limit / HTTP 429 after both CAs fail at the current mode (or only one CA is configured) | `domain`, `from`, `to` — mode before/after downgrade | Sets `.downgradeCertMode` to the next lower mode for `certs.downgradeCertModeHours` (`prod`→`test`→`mock`→`none`). When the override is already `none`, Nginx serves plain HTTP and skips ACME for that domain until the TTL expires; other domains continue. |
 | `cert_issue_failed` | After `certs.triesCount` non–rate-limit issuance failures for a domain (one attempt per agent cycle) | `domain`, `attempts`, `mode`, `blocked_until` | Writes `blocked: true` in `.retries` until `blocked_until` (now+`certs.blockHours`); further issue attempts for that domain are skipped while blocked. Other domains continue. |
 
 ## Additional Settings
 
-Optional keys in `/home/ap/.apinfra` for logging verbosity, ACME CA selection, and operation timeouts.
+Optional keys in `/home/ap/.apinfra` for logging verbosity and operation timeouts. Certificate / ACME settings are documented under [Certificate issuance and renewal](#certificate-issuance-and-renewal).
 
 <table>
 <thead>
@@ -605,57 +610,6 @@ Optional keys in `/home/ap/.apinfra` for logging verbosity, ACME CA selection, a
 <td><code>useExecLogs</code></td>
 <td><code>false</code></td>
 <td>Optional. When <code>true</code>, detailed stdout and stderr of command invocations are written to the system journal (<code>journalctl</code>).</td>
-</tr>
-</tbody>
-</table>
-
-### Certificates (ACME CA)
-
-Per-project certificate **mode** (`cert-issue-type`, email, refresh interval) lives in `settings.yml`. The host `.apinfra` selects which ACME certificate authority issues `prod` / `test` certificates, optional DNS preflight IP, and optional directory URL overrides. Retry / downgrade knobs (`certs.triesCount`, `certs.blockHours`, `certs.rateLimitBlockHours`) are documented under [Certificate issuance](#certificate-issuance).
-
-<table>
-<thead>
-<tr>
-<th align="left">Property</th>
-<th align="left">Default</th>
-<th align="left">Description</th>
-</tr>
-</thead>
-<tbody>
-<tr bgcolor="#f6f8fa">
-<td><code>certs.provider</code></td>
-<td><code>letsencrypt</code></td>
-<td>Primary ACME CA: <code>letsencrypt</code> or <code>zerossl</code>. ZeroSSL as primary requires EAB credentials below.</td>
-</tr>
-<tr>
-<td><code>certs.zerossl.AcmeKid</code></td>
-<td>—</td>
-<td>ZeroSSL External Account Binding (EAB) key id. Required when <code>certs.provider=zerossl</code>. Obtain from the ZeroSSL panel. If set while the primary is Let's Encrypt, ZeroSSL is used as the rate-limit fallback CA before mode downgrade.</td>
-</tr>
-<tr bgcolor="#f6f8fa">
-<td><code>certs.zerossl.AcmeHmac</code></td>
-<td>—</td>
-<td>ZeroSSL EAB HMAC key. Required together with <code>AcmeKid</code> when using ZeroSSL (primary or fallback).</td>
-</tr>
-<tr>
-<td><code>certs.publicIP</code></td>
-<td>—</td>
-<td>Optional. If set, DNS preflight (<code>dig +short</code>) before ACME requires this IP among the answers. If unset, any resolved IP is enough. See [Certificate issuance](#certificate-issuance).</td>
-</tr>
-<tr bgcolor="#f6f8fa">
-<td><code>certs.letsencrypt.directory</code></td>
-<td><code>https://acme-v02.api.letsencrypt.org/directory</code></td>
-<td>Optional. Let's Encrypt production ACME directory URL (lego <code>CADirURL</code>).</td>
-</tr>
-<tr>
-<td><code>certs.letsencrypt.stagingDirectory</code></td>
-<td><code>https://acme-staging-v02.api.letsencrypt.org/directory</code></td>
-<td>Optional. Let's Encrypt staging ACME directory URL used for <code>cert-issue-type: test</code>.</td>
-</tr>
-<tr bgcolor="#f6f8fa">
-<td><code>certs.zerossl.directory</code></td>
-<td><code>https://acme.zerossl.com/v2/DV90</code></td>
-<td>Optional. ZeroSSL ACME directory URL.</td>
 </tr>
 </tbody>
 </table>
@@ -725,17 +679,3 @@ Omit a key or leave it empty for the default. Values are Go durations (`30s`, `1
 </tr>
 </tbody>
 </table>
-
-Example:
-
-```properties
-useExecLogs=true
-certs.provider=letsencrypt
-#certs.zerossl.AcmeKid=
-#certs.zerossl.AcmeHmac=
-gitTimeout=45s
-dockerLoginTimeout=30s
-dockerComposePullTimeout=15m
-certIssueTimeout=5m
-nginxCLITimeout=45s
-```
