@@ -22,7 +22,7 @@ certs.triesCount=3
 certs.blockHours=24
 
 # Hours to hold a mode downgrade after ACME rate limit / HTTP 429.
-certs.rateLimitBlockHours=24
+certs.downgradeCertModeHours=24
 
 # When certs.provider is zerossl, the following required parameters must be set.
 # These can be obtained from the ZeroSSL panel.

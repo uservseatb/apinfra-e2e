@@ -10,6 +10,12 @@ It does **not** contain the agent source. Product code lives in `../apinfra`. Th
 
 `testdata/README.md` is the **product** README (kept in sync with `../apinfra`). Treat it as the behavior contract when writing or planning scenarios. The root [`README.md`](README.md) describes this e2e repo for humans. The inventory of implemented E2E scenarios lives only in [`E2E_SCENARIOS.md`](E2E_SCENARIOS.md) — never in either README.
 
+**Intentional README omissions (keep covered in e2e):** some behaviors stay in product code but are **deliberately** left out of the product README. Do **not** delete or “fix” these scenarios just because they disagree with `testdata/README.md`; do **not** re-document them in either README. Known cases:
+
+| Scenario | Undocumented but implemented |
+|----------|------------------------------|
+| `testdata/docker/container_name_target.txt` | `proxy.target.service-name` may match compose `container_name` (before strip); runtime DNS stays `<service_key>.apinfra_<project>`; `container_name` is stripped before start |
+
 ## Prerequisites
 
 1. Docker available to the test process (`DOCKER_*` env is propagated).
@@ -88,8 +94,8 @@ When adding a scenario, place it under the matching theme. If none fit and the n
 
 ### When the user asks to add a specific scenario
 
-1. Check the request against `testdata/README.md` first.
-2. If the requested behavior **disagrees** with the product README (wrong effect, undocumented detail, contradicts soft-fail / events / cert rules, etc.): stop, explain the mismatch, and agree on the scenario in dialogue before writing files.
+1. Check the request against `testdata/README.md` first (and the intentional-omission table above).
+2. If the requested behavior **disagrees** with the product README (wrong effect, undocumented detail, contradicts soft-fail / events / cert rules, etc.) **and** is not listed as an intentional omission: stop, explain the mismatch, and agree on the scenario in dialogue before writing files.
 3. Once aligned: implement `testdata/<theme>/<name>.txt`, update `E2E_SCENARIOS.md`, and stop.
 4. **Do not run** the scenario yourself.
 
@@ -119,7 +125,7 @@ Each `testdata/<theme>/<name>.txt` is a testscript archive:
 - Keep scenarios focused (one behavior). Reuse the alpine/`nc` HTTP stub pattern from existing files.
 - ACME domain scenarios need DNS preflight: ship a tiny `bin/dig` stub and `chmod 0755` + prepend `PATH`.
 - Always stop Pebble / rate-limit servers started in the script (`pebble-stop`, `acme-ratelimit-stop`).
-- Match product behavior from `testdata/README.md` (validation soft-fail, cert rollback, port strip/rewrite, events). Do not assert implementation details that the product README does not promise.
+- Match product behavior from `testdata/README.md` (validation soft-fail, cert rollback, port strip/rewrite, events). Do not assert implementation details that the product README does not promise — **except** intentional omissions listed above (e.g. `container_name_target`).
 - Change only what the task needs; no drive-by refactors of `env/` unless required by the new scenario.
 - In `stderr` / `stdout` patterns, avoid unescaped regex metacharacters (especially `(` `)` `.`) unless intentional — testscript matches as regexp.
 
