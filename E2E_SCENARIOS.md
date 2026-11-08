@@ -17,6 +17,7 @@ First deploy, idempotent re-run, validation soft-fail / leave prior state alone.
 | `happy_path.txt` | First deploy: compose up, proxy, `done duration=` |
 | `idempotency.txt` | Second cycle with unchanged Git leaves stack running |
 | `validation_rollback.txt` | Invalid `settings.yml` soft-fails; prior containers untouched |
+| `git_login_failed.txt` | Config-repo clone HTTP 401 → `git_login_failed`; cycle aborted; prior Docker/Nginx untouched |
 
 ### `docker/` — Docker / Compose apply
 
@@ -26,6 +27,8 @@ Ports, `network_mode`, healing, enabling/disabling projects.
 |------|--------|
 | `port_stripping.txt` | Default: compose `ports` stripped (no public host publish) |
 | `port_mapping.txt` | `allow-ports-mapping: true` keeps ports; unbound host IP → `127.0.0.1` |
+| `port_mapping_reject_wildcard.txt` | `allow-ports-mapping: true` + `0.0.0.0` / `::` → soft-fail; prior containers untouched |
+| `docker_login_failed.txt` | Full registry creds + failed `docker login` → `docker_login_failed`; compose written; no app up; prune skipped |
 | `network_mode_host_stripped.txt` | `network_mode: host` stripped before start; runtime NetworkMode is not `host` |
 | `heal_deleted_container.txt` | Two projects; `docker rm` one service in a 2-container stack → next cycle recreates it |
 | `heal_stopped_container.txt` | Two projects; `docker stop` one service in a 2-container stack → next cycle starts it again |

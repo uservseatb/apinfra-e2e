@@ -1,0 +1,102 @@
+# Scenario: with allow-ports-mapping, host IPs 0.0.0.0 and :: are rejected;
+# the cycle soft-fails and prior containers stay running.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: baseline without wildcard ports'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+# --- Cycle 1: healthy stack ---
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-web-web
+
+cd git-repo
+cp ../compose.ipv4-wildcard.yml dev/e2e-web/docker-compose.yml
+cp ../settings.allow-ports.yml dev/settings.yml
+exec git add .
+exec git commit -m 'fix: publish 0.0.0.0 host IP'
+cd ..
+
+# --- Cycle 2: 0.0.0.0 rejected; prior container untouched ---
+exec apinfra
+stderr 'disallowed host IP'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+docker-assert-running apinfra_e2e-web-web
+
+cd git-repo
+cp ../compose.ipv6-wildcard.yml dev/e2e-web/docker-compose.yml
+exec git add .
+exec git commit -m 'fix: publish :: host IP'
+cd ..
+
+# --- Cycle 3: :: rejected; prior container still untouched ---
+exec apinfra
+stderr 'disallowed host IP'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+docker-assert-running apinfra_e2e-web-web
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        port: 9999
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- settings.allow-ports.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        port: 9999
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+      allow-ports-mapping: true
+
+-- git-repo/dev/e2e-web/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+
+-- compose.ipv4-wildcard.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    ports:
+      - "0.0.0.0:18080:80"
+
+-- compose.ipv6-wildcard.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    ports:
+      - "[::]:18080:80"
+
+-- .env --

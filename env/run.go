@@ -118,6 +118,8 @@ var commands = map[string]func(*testscript.TestScript, bool, []string){
 	acmeRateLimitStopCmd:      acmeRateLimitStopCmdFn,
 	pebbleStartCmd:            pebbleStartCmdFn,
 	pebbleStopCmd:             pebbleStopCmdFn,
+	gitAuthFailStartCmd:       gitAuthFailStartCmdFn,
+	gitAuthFailStopCmd:        gitAuthFailStopCmdFn,
 }
 
 func propagateEnv(env *testscript.Env, keys ...string) {

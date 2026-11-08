@@ -116,6 +116,7 @@ Each `testdata/<theme>/<name>.txt` is a testscript archive:
    - `docker-assert-port-binding <name-substring> <hostIP> <hostPort> <containerPort>`
    - `pebble-start` / `pebble-stop`
    - `acme-ratelimit-start` / `acme-ratelimit-stop`
+   - `git-authfail-start` / `git-authfail-stop` (HTTP 401 stub on `127.0.0.1:18081`)
 5. Embed host + Git fixtures after `-- path --` markers (txtar). Override `.apinfra` / `.env` in the archive when postinst defaults are wrong — Setup installs examples only if missing.
 
 ### Conventions
@@ -124,7 +125,7 @@ Each `testdata/<theme>/<name>.txt` is a testscript archive:
 - Prefer **environment stubs** over Go mocks: local `file://` Git, fake `bin/dig` on `PATH`, Pebble, ACME 429 stub.
 - Keep scenarios focused (one behavior). Reuse the alpine/`nc` HTTP stub pattern from existing files.
 - ACME domain scenarios need DNS preflight: ship a tiny `bin/dig` stub and `chmod 0755` + prepend `PATH`.
-- Always stop Pebble / rate-limit servers started in the script (`pebble-stop`, `acme-ratelimit-stop`).
+- Always stop Pebble / rate-limit / git-authfail servers started in the script (`pebble-stop`, `acme-ratelimit-stop`, `git-authfail-stop`).
 - Match product behavior from `testdata/README.md` (validation soft-fail, cert rollback, port strip/rewrite, events). Do not assert implementation details that the product README does not promise — **except** intentional omissions listed above (e.g. `container_name_target`).
 - Change only what the task needs; no drive-by refactors of `env/` unless required by the new scenario.
 - In `stderr` / `stdout` patterns, avoid unescaped regex metacharacters (especially `(` `)` `.`) unless intentional — testscript matches as regexp.

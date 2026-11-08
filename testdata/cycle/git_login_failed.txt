@@ -1,0 +1,72 @@
+# Scenario: config-repo clone auth failure writes git_login_failed and aborts
+# the cycle; prior Docker/Nginx state is left unchanged.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: baseline reachable file repo'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+# --- Cycle 1: healthy deploy ---
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-web-web
+exists $HOME/infra/nginx/conf/dev_e2e-web.conf
+! exists $HOME/.events
+
+git-authfail-start
+
+# Point at HTTP 401 stub with a token so go-git classifies the failure as auth.
+cp .apinfra.authfail .apinfra
+
+# --- Cycle 2: clone 401 → event + abort; stack untouched ---
+exec apinfra
+stderr 'git authentication failed'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+
+exists $HOME/.events
+grep 'git_login_failed' $HOME/.events
+grep 'http://127.0.0.1:18081/repo' $HOME/.events
+
+docker-assert-running apinfra_e2e-web-web
+exists $HOME/infra/nginx/conf/dev_e2e-web.conf
+
+git-authfail-stop
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- .apinfra.authfail --
+namespace=dev
+repoBranch=main
+repo=http://127.0.0.1:18081/repo
+repoToken=bad-token
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        port: 9999
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-web/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+
+-- .env --

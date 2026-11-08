@@ -1,0 +1,63 @@
+# Scenario: full registry credentials + failed docker login → docker_login_failed;
+# compose may be written, but pull/up stop. Prune is skipped. (Nginx is skipped only
+# when apinfra-proxy is not already running on the Docker host.)
+#
+# Project name is unique so leftover host containers from other scenarios
+# (e.g. apinfra_e2e-web-web-1) do not false-positive the "! running" assert.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: app needing compose up'
+cd ..
+
+# Unreachable registry so docker login fails quickly (short timeout).
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'logging into registry 127.0.0.1:1'
+stderr 'docker login 127.0.0.1:1'
+stderr 'WARN cycle finished with errors'
+stderr 'pruning skipped'
+stderr 'done duration='
+
+exists $HOME/.events
+grep 'docker_login_failed' $HOME/.events
+grep '127.0.0.1:1' $HOME/.events
+
+# Compose may already be on disk; this cycle must not have started the app.
+exists $HOME/infra/apps/e2e-dlogin/docker-compose.yml
+! docker-assert-running apinfra_e2e-dlogin-web
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+containerRegistryHost=127.0.0.1:1
+containerRegistryUser=bad
+containerRegistryToken=bad
+dockerLoginTimeout=5s
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-dlogin
+    enabled: true
+    proxy:
+      inbound:
+        port: 9999
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-dlogin/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+
+-- .env --
