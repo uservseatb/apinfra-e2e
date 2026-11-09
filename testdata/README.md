@@ -366,8 +366,9 @@ Drop `-f` to print recent logs without following, or add `-n 200` to limit the o
     * Plain port mappings (e.g. `"8080:80"`) are automatically bound to `127.0.0.1` (reachable only on the server itself).
     * Mappings that explicitly specify a concrete host network-interface IP (e.g. `"192.168.1.100:8080:80"`) are kept as written.
     * Attempts to open ports to the world via public addresses `0.0.0.0` or `::` (e.g. `"0.0.0.0:8080:80"`) are fully rejected by the agent, and the deploy cycle stops with an error.
-* **Host-Network Control:** Any use of `network_mode: host` in the application's `docker-compose.yml` is forcibly removed before start. This option is fully blocked for security — all projects must stay on isolated bridge networks.
-* **Privilege Escalation Protection:** Every container is started with `no-new-privileges: true`. This forbids processes inside the container from gaining new privileges after startup (e.g. via setuid/setgid binaries). Even if the application inside the container initializes as root, this layer protects the host from runtime exploits and container-escape attempts.
+* **Host-Network Control:** Any use of custom `network_mode` in the application's `docker-compose.yml` is forcibly removed before start. This option is fully blocked for security — all projects must stay on isolated bridge networks.
+* **Privilege Escalation Protection:** Every container is started with `no-new-privileges: true`. This forbids processes inside the container from gaining new privileges after startup (e.g. via setuid/setgid binaries). Even if the application inside the container initializes as root, this layer protects the host from runtime exploits and container-escape attempts. The agent explicitly forces `privileged: false` and strips any privileged flags or dangerous capabilities to isolate containers.
+* **Compose Include/Extends Guard:** `include` and `extends` are blocked to prevent host filesystem attacks via compose file composition.
 
 ### Project `.env` and Variable Normalization
 Each project folder may include an optional `.env` next to its `docker-compose.yml`. In that file you can use a dot-separated "Java-style" notation. Before evaluating the variables, the agent **normalizes** them: it replaces dots with underscores and converts strings to uppercase.
