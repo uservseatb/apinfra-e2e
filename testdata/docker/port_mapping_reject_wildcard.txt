@@ -26,7 +26,7 @@ cd ..
 
 # --- Cycle 2: 0.0.0.0 rejected; prior container untouched ---
 exec apinfra
-stderr 'disallowed host IP'
+stderr 'disallowed published host IP'
 stderr 'WARN cycle finished with errors'
 stderr 'done duration='
 docker-assert-running apinfra_e2e-web-web
@@ -39,7 +39,7 @@ cd ..
 
 # --- Cycle 3: :: rejected; prior container still untouched ---
 exec apinfra
-stderr 'disallowed host IP'
+stderr 'disallowed published host IP'
 stderr 'WARN cycle finished with errors'
 stderr 'done duration='
 docker-assert-running apinfra_e2e-web-web
