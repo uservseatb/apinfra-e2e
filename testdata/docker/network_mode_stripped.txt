@@ -1,0 +1,59 @@
+# Scenario: any custom network_mode is stripped before stack start (no opt-in).
+# README Host-Network Control — stacks stay on bridge / managed proxy nets.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: custom network_mode fixture'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'stripping network_mode=host'
+stderr 'stripping network_mode=bridge'
+stderr 'done duration='
+
+docker-assert-running apinfra_e2e-netmode-web
+docker-assert-running apinfra_e2e-netmode-side
+
+# Runtime must not keep compose network_mode values.
+exec sh -c 'mode=$(docker inspect -f "{{.HostConfig.NetworkMode}}" $(docker ps -q --filter name=apinfra_e2e-netmode-web)); echo "web_network_mode=$mode"; test "$mode" != "host"'
+exec sh -c 'mode=$(docker inspect -f "{{.HostConfig.NetworkMode}}" $(docker ps -q --filter name=apinfra_e2e-netmode-side)); echo "side_network_mode=$mode"; test "$mode" != "bridge"'
+
+exists $HOME/infra/apps/e2e-netmode/docker-compose.yml
+! grep 'network_mode' $HOME/infra/apps/e2e-netmode/docker-compose.yml
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-netmode
+    enabled: true
+    proxy:
+      inbound:
+        port: 9997
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-netmode/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    network_mode: host
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+  side:
+    image: alpine:latest
+    network_mode: bridge
+    command: sh -c "while true; do sleep 3600; done"
+
+-- .env --

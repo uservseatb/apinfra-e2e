@@ -29,14 +29,15 @@ Ports, `network_mode`, healing, enabling/disabling projects.
 | `port_mapping.txt` | `allow-ports-mapping: true` keeps ports; unbound host IP → `127.0.0.1` |
 | `port_mapping_reject_wildcard.txt` | `allow-ports-mapping: true` + `0.0.0.0` / `::` → soft-fail; prior containers untouched |
 | `docker_login_failed.txt` | Full registry creds + failed `docker login` → `docker_login_failed`; compose written; no app up; prune skipped |
-| `network_mode_host_stripped.txt` | `network_mode: host` stripped before start; runtime NetworkMode is not `host` |
+| `network_mode_stripped.txt` | Any custom `network_mode` (`host`, `bridge`, …) stripped before start; written compose has none |
 | `heal_deleted_container.txt` | Two projects; `docker rm` one service in a 2-container stack → next cycle recreates it |
 | `heal_stopped_container.txt` | Two projects; `docker stop` one service in a 2-container stack → next cycle starts it again |
 | `project_disabled_downs.txt` | Two projects; `enabled: false` → `compose down` for that app; sibling stays running |
 | `worker_no_proxy.txt` | Project with no `proxy` still runs; no nginx conf; sibling with proxy keeps routing |
 | `container_name_target.txt` | `proxy.target.service-name` matches `container_name`; name stripped at runtime; nginx uses YAML service DNS |
 | `service_name_target.txt` | `proxy.target.service-name` matches YAML compose service key; nginx DNS `<service_key>.apinfra_<project>`; curl OK |
-| `no_new_privileges.txt` | Started containers get `security_opt: no-new-privileges:true` |
+| `no_new_privileges.txt` | `privileged: true` cleared; containers get `security_opt: no-new-privileges:true` |
+| `include_extends_blocked.txt` | Compose `include` / `extends` to host paths ignored; leaked service never starts |
 
 ### `nginx/` — Nginx config
 

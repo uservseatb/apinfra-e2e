@@ -1,0 +1,77 @@
+# Scenario: include and extends are skipped so host filesystem compose
+# fragments cannot leak services. README Compose Include/Extends Guard.
+
+mkdir outside
+cp leaked.yml outside/leaked.yml
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+
+# Absolute host paths must appear in the committed compose blob.
+exec sh -c 'sed "s|__LEAKED__|$WORK/outside/leaked.yml|g" ../compose.guard.yml > dev/e2e-guard/docker-compose.yml'
+
+exec git add .
+exec git commit -m 'feat: include extends guard fixture'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'done duration='
+
+docker-assert-running apinfra_e2e-guard-web
+
+# Leaked service must never start (include/extends ignored).
+exec sh -c '! docker ps -a --format "{{.Names}}" | grep -qi leaked'
+
+exists $HOME/infra/apps/e2e-guard/docker-compose.yml
+grep 'web:' $HOME/infra/apps/e2e-guard/docker-compose.yml
+! grep 'leaked' $HOME/infra/apps/e2e-guard/docker-compose.yml
+! grep 'include:' $HOME/infra/apps/e2e-guard/docker-compose.yml
+! grep 'extends:' $HOME/infra/apps/e2e-guard/docker-compose.yml
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- leaked.yml --
+services:
+  leaked:
+    image: alpine:latest
+    command: sh -c "while true; do sleep 3600; done"
+
+-- compose.guard.yml --
+include:
+  - path: __LEAKED__
+services:
+  web:
+    image: alpine:latest
+    extends:
+      file: __LEAKED__
+      service: leaked
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-guard
+    enabled: true
+    proxy:
+      inbound:
+        port: 9995
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-guard/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+
+-- .env --
