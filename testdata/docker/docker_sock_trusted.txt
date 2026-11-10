@@ -1,0 +1,65 @@
+# Scenario: digest-pinned image listed in ~/.trusted_images may bind-mount
+# /var/run/docker.sock; deploy succeeds and writes trusted_image_deployed.
+# Allowlist matching is case-insensitive; comments/blank lines are ignored.
+# README Strict Volume & Socket Control / Trusted images / Events.
+
+exec docker pull alpine:latest
+
+# Resolve local RepoDigest once; compose uses canonical digest, allowlist uses UPPER case.
+exec sh -c 'DIGEST=$(docker image inspect alpine:latest --format "{{index .RepoDigests 0}}"); test -n "$DIGEST"; printf "# trusted sock images\n\n%s\n" "$(printf "%s" "$DIGEST" | tr "[:lower:]" "[:upper:]")" > "$HOME/.trusted_images"; chmod 600 "$HOME/.trusted_images"; sed "s|__DIGEST__|$DIGEST|g" compose.sock.yml > git-repo/dev/e2e-sockok/docker-compose.yml; echo "trusted=$DIGEST"'
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: trusted docker.sock fixture'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'trusted image deployed'
+stderr 'done duration='
+
+docker-assert-running apinfra_e2e-sockok-web
+exists $HOME/.events
+grep 'trusted_image_deployed' $HOME/.events
+grep 'sha256:' $HOME/.events
+exists $HOME/infra/apps/e2e-sockok/docker-compose.yml
+grep '/var/run/docker.sock' $HOME/infra/apps/e2e-sockok/docker-compose.yml
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-sockok
+    enabled: true
+    proxy:
+      inbound:
+        port: 9983
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- compose.sock.yml --
+services:
+  web:
+    image: __DIGEST__
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+-- git-repo/dev/e2e-sockok/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+
+-- .env --

@@ -21,7 +21,7 @@ First deploy, idempotent re-run, validation soft-fail / leave prior state alone.
 
 ### `docker/` — Docker / Compose apply
 
-Ports, `network_mode`, healing, enabling/disabling projects.
+Ports, `network_mode`, volumes/socket policy, healing, enabling/disabling projects.
 
 | File | Covers |
 |------|--------|
@@ -38,6 +38,10 @@ Ports, `network_mode`, healing, enabling/disabling projects.
 | `service_name_target.txt` | `proxy.target.service-name` matches YAML compose service key; nginx DNS `<service_key>.apinfra_<project>`; curl OK |
 | `no_new_privileges.txt` | `privileged: true` cleared; containers get `security_opt: no-new-privileges:true` |
 | `include_extends_blocked.txt` | Compose `include` / `extends` to host paths ignored; leaked service never starts |
+| `volume_policy_reject.txt` | Host bind + tmpfs → `security_violation` (`disallowed_bind_mount` / `disallowed_volume_type`); prior containers untouched |
+| `named_volume_ok.txt` | Named Docker volume allowed; written compose keeps `type: volume`; no security event |
+| `docker_sock_untrusted.txt` | Sock bind rejected when allowlist missing, tag-only listed, or digest not listed → `untrusted_docker_socket_mount`; prior containers untouched |
+| `docker_sock_trusted.txt` | Digest in `~/.trusted_images` (case-insensitive, comments/blanks ok) + sock → deploy + `trusted_image_deployed` |
 
 ### `nginx/` — Nginx config
 

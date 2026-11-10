@@ -1,0 +1,111 @@
+# Scenario: /var/run/docker.sock is rejected when the image is not listed in
+# ~/.trusted_images (missing file, tag-only entry, or digest not on the allowlist).
+# Prior containers stay running. README Strict Volume & Socket Control / Trusted images.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: baseline without docker.sock'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+# --- Cycle 1: healthy stack ---
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-sockbad-web
+! exists $HOME/.trusted_images
+
+cd git-repo
+cp ../compose.sock-tag.yml dev/e2e-sockbad/docker-compose.yml
+exec git add .
+exec git commit -m 'fix: untrusted docker.sock bind (tag-only, no allowlist)'
+cd ..
+
+# --- Cycle 2: missing ~/.trusted_images + tag-only image → reject ---
+exec apinfra
+stderr 'security_violation'
+stderr 'untrusted_docker_socket_mount'
+stderr 'volume policy violation'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+
+exists $HOME/.events
+grep 'security_violation' $HOME/.events
+grep 'untrusted_docker_socket_mount' $HOME/.events
+docker-assert-running apinfra_e2e-sockbad-web
+
+# Tag-only lines never qualify even if present in the allowlist file.
+exec sh -c 'printf "alpine:latest\n" > "$HOME/.trusted_images"; chmod 600 "$HOME/.trusted_images"'
+
+# --- Cycle 3: tag listed in ~/.trusted_images still rejected ---
+exec apinfra
+stderr 'security_violation'
+stderr 'untrusted_docker_socket_mount'
+stderr 'volume policy violation'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+docker-assert-running apinfra_e2e-sockbad-web
+
+# Digest-pinned image with sock, but digest not listed → reject.
+exec docker pull alpine:latest
+exec sh -c 'DIGEST=$(docker image inspect alpine:latest --format "{{index .RepoDigests 0}}"); test -n "$DIGEST"; printf "# comment\n\nother@sha256:0000000000000000000000000000000000000000000000000000000000000000\n" > "$HOME/.trusted_images"; chmod 600 "$HOME/.trusted_images"; sed "s|__DIGEST__|$DIGEST|g" compose.sock-digest.yml > git-repo/dev/e2e-sockbad/docker-compose.yml; echo "unlisted=$DIGEST"'
+
+cd git-repo
+exec git add .
+exec git commit -m 'fix: digest-pinned sock image not on allowlist'
+cd ..
+
+# --- Cycle 4: digest-pinned but not listed → reject ---
+exec apinfra
+stderr 'security_violation'
+stderr 'untrusted_docker_socket_mount'
+stderr 'volume policy violation'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+docker-assert-running apinfra_e2e-sockbad-web
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-sockbad
+    enabled: true
+    proxy:
+      inbound:
+        port: 9982
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-sockbad/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+
+-- compose.sock-tag.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+-- compose.sock-digest.yml --
+services:
+  web:
+    image: __DIGEST__
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+-- .env --

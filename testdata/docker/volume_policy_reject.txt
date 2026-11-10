@@ -1,0 +1,98 @@
+# Scenario: host bind mounts and non-volume types are rejected with
+# security_violation; cycle soft-fails and prior containers stay running.
+# README Strict Volume & Socket Control / Events.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: baseline without forbidden mounts'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+# --- Cycle 1: healthy stack ---
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-volpol-web
+
+cd git-repo
+cp ../compose.bind.yml dev/e2e-volpol/docker-compose.yml
+exec git add .
+exec git commit -m 'fix: host bind mount'
+cd ..
+
+# --- Cycle 2: bind rejected; prior container untouched ---
+exec apinfra
+stderr 'security_violation'
+stderr 'disallowed_bind_mount'
+stderr 'volume policy violation'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+
+exists $HOME/.events
+grep 'security_violation' $HOME/.events
+grep 'disallowed_bind_mount' $HOME/.events
+docker-assert-running apinfra_e2e-volpol-web
+
+cd git-repo
+cp ../compose.tmpfs.yml dev/e2e-volpol/docker-compose.yml
+exec git add .
+exec git commit -m 'fix: tmpfs volume type'
+cd ..
+
+# --- Cycle 3: tmpfs rejected; prior container still untouched ---
+exec apinfra
+stderr 'security_violation'
+stderr 'disallowed_volume_type'
+stderr 'volume policy violation'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+
+grep 'disallowed_volume_type' $HOME/.events
+docker-assert-running apinfra_e2e-volpol-web
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-volpol
+    enabled: true
+    proxy:
+      inbound:
+        port: 9980
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-volpol/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+
+-- compose.bind.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    volumes:
+      - /tmp:/data
+
+-- compose.tmpfs.yml --
+services:
+  web:
+    image: alpine:latest
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    volumes:
+      - type: tmpfs
+        target: /tmp
+
+-- .env --
