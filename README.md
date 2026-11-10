@@ -1,5 +1,12 @@
 # apinfra-e2e
 
+[![Go Version](https://img.shields.io/github/go-mod/go-version/uservseatb/apinfra-e2e)](https://github.com/uservseatb/apinfra-e2e/blob/main/go.mod)
+[![License](https://img.shields.io/github/license/uservseatb/apinfra-e2e)](LICENSE)
+![Testing - E2E](https://img.shields.io/badge/Testing-E2E-blue)
+![Framework - testscript](https://img.shields.io/badge/Framework-testscript-blue)
+![Environment - DinD](https://img.shields.io/badge/Environment-DinD-blue)
+![ACME Stub - Pebble](https://img.shields.io/badge/ACME%20Stub-Pebble-brightgreen)
+
 End-to-end tests for [apinfra](https://github.com/uservseatb/apinfra) — a GitOps agent that deploys docker-compose apps with Nginx and SSL certificates.
 
 This repo does **not** contain the agent source. It runs the compiled `apinfra` binary against real Git, Docker, Nginx, and local ACME stubs (Pebble / rate-limit), using [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scenarios.
