@@ -8,8 +8,8 @@ exec git add .
 exec git commit -m 'feat: initial infrastructure setup'
 cd ..
 
-# testscript автоматически заменяет $WORK на реальный абсолютный путь прямо здесь!
-# Мы берем шаблон и дописываем в него честный путь.
+# testscript expands $WORK to the real absolute path right here.
+# Copy the template, then append a real file:// repo path.
 cp .apinfra.template .apinfra
 exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
 
