@@ -138,6 +138,7 @@ When the user asks to create a git commit, follow common open-source practices (
 - Keep the subject short (~72 chars); focus on **why** / intent, not a file list.
 - Optional body: motivation and user-visible impact; wrap near 72 columns; blank line after the subject.
 - **One logical change per commit** — do not mix unrelated edits.
+- When syncing the product README (`testdata/README.md` from `../apinfra`), use this exact subject: `docs: sync updated apinfra README`.
 - Never commit secrets, live credentials, or `bin/apinfra`.
 - Commit **only** when the user asks; do not push unless asked.
 - Prefer `git commit` with a HEREDOC for the message; do not skip hooks unless the user explicitly requests it.
