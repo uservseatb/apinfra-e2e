@@ -1,0 +1,133 @@
+# Scenario: nginx conf written + nginx -t OK but reload fails → live proxy keeps
+# old routing; next unchanged cycle retries reload until curl through inbound
+# matches disk (REL-02). Modes: accessibility via apinfra-proxy only.
+#
+# Cycle 1: deploy e2e-reload on target :80 → curl inbound = RELOAD_MARKER_V1.
+# Cycle 2: Git target.port 80→8080 + compose V2 on :8080; docker stub fails
+#          `nginx -s reload` once → disk conf has :8080, curl inbound ≠ V2.
+#          Then remove the stub so recovery uses real docker (not stub pass-through).
+# Cycle 3: same Git; pending reload retries → live nginx -T has :8080 → curl V2.
+# Cycle 4: unchanged → still V2.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: reload pending baseline'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-reload-web
+exec curl -sf http://127.0.0.1:9976/
+stdout 'RELOAD_MARKER_V1'
+grep 'web\.apinfra_e2e-reload:80' $HOME/infra/nginx/conf/dev_e2e-reload.conf
+
+# PATH stub: fail the next `docker exec apinfra-proxy nginx -s reload` once.
+exec sh -c 'command -v docker > "$HOME/real-docker"'
+chmod 0755 bin/docker
+env PATH=$WORK/bin:$PATH
+exec sh -c 'touch "$HOME/reload-fail-armed"'
+
+cd git-repo
+cp ../compose.v2.yml dev/e2e-reload/docker-compose.yml
+cp ../settings.v2.yml dev/settings.yml
+exec git add .
+exec git commit -m 'chore: target port 8080 + V2 marker'
+cd ..
+
+exec apinfra
+stderr 'e2e stub: failing nginx -s reload'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+
+grep 'web\.apinfra_e2e-reload:8080' $HOME/infra/nginx/conf/dev_e2e-reload.conf
+docker-assert-running apinfra_e2e-reload-web
+# Live nginx still on :80 while app only listens on :8080 → proxy not serving V2.
+! exec curl -sf --max-time 3 http://127.0.0.1:9976/
+! stdout 'RELOAD_MARKER_V2'
+
+# Drop the stub so the pending-reload retry talks to real docker directly.
+rm bin/docker
+
+# No further Git change; reload must be retried from pending.
+exec apinfra
+stderr 'pending=true'
+stderr 'done duration='
+docker-assert-running apinfra_e2e-reload-web
+# Live master must have picked up the new upstream after reload.
+exec docker exec apinfra-proxy nginx -T
+stdout 'web\.apinfra_e2e-reload:8080'
+exec sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do out=$(curl -sf --max-time 2 http://127.0.0.1:9976/ || true); if [ "$out" = "RELOAD_MARKER_V2" ]; then echo "$out"; exit 0; fi; sleep 0.5; done; echo "still not V2 after reload retry" >&2; exit 1'
+stdout 'RELOAD_MARKER_V2'
+
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-reload-web
+exec curl -sf http://127.0.0.1:9976/
+stdout 'RELOAD_MARKER_V2'
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-reload
+    enabled: true
+    proxy:
+      inbound:
+        port: 9976
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- settings.v2.yml --
+version: "1.0"
+projects:
+  - name: e2e-reload
+    enabled: true
+    proxy:
+      inbound:
+        port: 9976
+      target:
+        service-name: web
+        port: 8080
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-reload/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=RELOAD_MARKER_V1"]
+-- compose.v2.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:8080", "-text=RELOAD_MARKER_V2"]
+
+-- bin/docker --
+#!/bin/sh
+set -eu
+# Fail one nginx -s reload while $HOME/reload-fail-armed exists, then disarm.
+REAL=$(cat "$HOME/real-docker")
+if [ -f "$HOME/reload-fail-armed" ]; then
+	case " $* " in
+	*' exec apinfra-proxy nginx -s reload '*)
+		rm -f "$HOME/reload-fail-armed"
+		echo 'e2e stub: failing nginx -s reload' >&2
+		exit 1
+		;;
+	esac
+fi
+exec "$REAL" "$@"
+
+-- .env --

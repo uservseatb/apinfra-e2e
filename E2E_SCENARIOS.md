@@ -57,6 +57,7 @@ Proxy conf write / restore / port TLS.
 | `domain_prod_switch_fail_keeps_proxy.txt` | Prod domain A live (curl); switch to B + non-429 ACME fail → block B, rollback conf A, curl A still OK |
 | `proxy_stops_after_project_removed.txt` | Remove project from settings → down + conf gone; curl old port fails, sibling port still OK |
 | `proxy_stops_after_project_disabled.txt` | `enabled: false` → down + conf gone; curl old port fails, sibling port still OK |
+| `reload_pending_retry.txt` | Conf+`-t` OK but `nginx -s reload` fails (docker stub once) → curl inbound ≠ V2; unchanged next cycle retries reload → curl V2; fourth cycle stays V2 (REL-02) |
 
 ### `certs/` — Certificates / ACME
 
