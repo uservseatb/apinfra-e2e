@@ -1,0 +1,104 @@
+# Scenario: failed apply after compose change keeps the old container; next cycle
+# retries without a new Git commit once the host dependency is fixed (REL-01).
+#
+# Cycle 1: deploy e2e-pend serving PEND_MARKER_V1.
+# Cycle 2: Git compose → V2 + bad registry on host → login fails;
+#          same container still serves V1 (update not applied).
+# Cycle 3: fix .apinfra only (no Git) → pull/up recreates container; curl V2.
+# Cycle 4: unchanged → stack still up on V2.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: apply pending baseline'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-pend-web
+exec curl -sf http://127.0.0.1:9977/
+stdout 'PEND_MARKER_V1'
+
+exec sh -c 'docker ps -aq --filter name=apinfra_e2e-pend-web > $WORK/old-cid'
+exec sh -c 'test -s $WORK/old-cid'
+
+cd git-repo
+cp ../compose.v2.yml dev/e2e-pend/docker-compose.yml
+exec git add .
+exec git commit -m 'chore: compose content change for pending retry'
+cd ..
+
+# Bad registry so login fails after the compose change is staged.
+cp .apinfra.bad-registry .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'logging into registry 127.0.0.1:1'
+stderr 'docker login 127.0.0.1:1'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+
+docker-assert-running apinfra_e2e-pend-web
+exec sh -c 'test "$(docker ps -aq --filter name=apinfra_e2e-pend-web)" = "$(cat $WORK/old-cid)"'
+exec curl -sf http://127.0.0.1:9977/
+stdout 'PEND_MARKER_V1'
+
+# Recover host dependency without another Git commit.
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-pend-web
+exec sh -c 'test "$(docker ps -aq --filter name=apinfra_e2e-pend-web)" != "$(cat $WORK/old-cid)"'
+exec curl -sf http://127.0.0.1:9977/
+stdout 'PEND_MARKER_V2'
+
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-pend-web
+exec curl -sf http://127.0.0.1:9977/
+stdout 'PEND_MARKER_V2'
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- .apinfra.bad-registry --
+namespace=dev
+repoBranch=main
+containerRegistryHost=127.0.0.1:1
+containerRegistryUser=bad
+containerRegistryToken=bad
+dockerLoginTimeout=5s
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-pend
+    enabled: true
+    proxy:
+      inbound:
+        port: 9977
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-pend/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=PEND_MARKER_V1"]
+-- compose.v2.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=PEND_MARKER_V2"]
+-- .env --

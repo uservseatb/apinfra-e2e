@@ -29,6 +29,7 @@ Ports, `network_mode`, volumes/socket policy, healing, enabling/disabling projec
 | `port_mapping.txt` | `allow-ports-mapping: true` keeps ports; unbound host IP → `127.0.0.1` |
 | `port_mapping_reject_wildcard.txt` | `allow-ports-mapping: true` + `0.0.0.0` / `::` → soft-fail; prior containers untouched |
 | `docker_login_failed.txt` | Full registry creds + failed `docker login` → `docker_login_failed`; compose written; no app up; prune skipped |
+| `apply_pending_retry.txt` | Compose change + failed login keeps same container on V1; fix host registry (no Git) → next cycle recreates container serving V2; fourth cycle stays on V2 |
 | `network_mode_stripped.txt` | Any custom `network_mode` (`host`, `bridge`, …) stripped before start; written compose has none |
 | `heal_deleted_container.txt` | Two projects; `docker rm` one service in a 2-container stack → next cycle recreates it |
 | `heal_stopped_container.txt` | Two projects; `docker stop` one service in a 2-container stack → next cycle starts it again |
