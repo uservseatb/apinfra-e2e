@@ -48,11 +48,11 @@ include:
   - path: __LEAKED__
 services:
   web:
-    image: alpine:latest
+    image: hashicorp/http-echo:latest
     extends:
       file: __LEAKED__
       service: leaked
-    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    command: ["-listen=:80", "-text=OK"]
 
 -- git-repo/dev/settings.yml --
 version: "1.0"
@@ -71,7 +71,7 @@ projects:
 -- git-repo/dev/e2e-guard/docker-compose.yml --
 services:
   web:
-    image: alpine:latest
-    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
 
 -- .env --

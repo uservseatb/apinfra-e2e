@@ -39,7 +39,7 @@ grep 'untrusted_docker_socket_mount' $HOME/.events
 docker-assert-running apinfra_e2e-sockbad-web
 
 # Tag-only lines never qualify even if present in the allowlist file.
-exec sh -c 'printf "alpine:latest\n" > "$HOME/.trusted_images"; chmod 600 "$HOME/.trusted_images"'
+exec sh -c 'printf "hashicorp/http-echo:latest\n" > "$HOME/.trusted_images"; chmod 600 "$HOME/.trusted_images"'
 
 # --- Cycle 3: tag listed in ~/.trusted_images still rejected ---
 exec apinfra
@@ -51,8 +51,8 @@ stderr 'done duration='
 docker-assert-running apinfra_e2e-sockbad-web
 
 # Digest-pinned image with sock, but digest not listed → reject.
-exec docker pull alpine:latest
-exec sh -c 'DIGEST=$(docker image inspect alpine:latest --format "{{index .RepoDigests 0}}"); test -n "$DIGEST"; printf "# comment\n\nother@sha256:0000000000000000000000000000000000000000000000000000000000000000\n" > "$HOME/.trusted_images"; chmod 600 "$HOME/.trusted_images"; sed "s|__DIGEST__|$DIGEST|g" compose.sock-digest.yml > git-repo/dev/e2e-sockbad/docker-compose.yml; echo "unlisted=$DIGEST"'
+exec docker pull hashicorp/http-echo:latest
+exec sh -c 'DIGEST=$(docker image inspect hashicorp/http-echo:latest --format "{{index .RepoDigests 0}}"); test -n "$DIGEST"; printf "# comment\n\nother@sha256:0000000000000000000000000000000000000000000000000000000000000000\n" > "$HOME/.trusted_images"; chmod 600 "$HOME/.trusted_images"; sed "s|__DIGEST__|$DIGEST|g" compose.sock-digest.yml > git-repo/dev/e2e-sockbad/docker-compose.yml; echo "unlisted=$DIGEST"'
 
 cd git-repo
 exec git add .
@@ -89,14 +89,14 @@ projects:
 -- git-repo/dev/e2e-sockbad/docker-compose.yml --
 services:
   web:
-    image: alpine:latest
-    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
 
 -- compose.sock-tag.yml --
 services:
   web:
-    image: alpine:latest
-    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
@@ -104,7 +104,7 @@ services:
 services:
   web:
     image: __DIGEST__
-    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    command: ["-listen=:80", "-text=OK"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 

@@ -123,7 +123,7 @@ Each `testdata/<theme>/<name>.txt` is a testscript archive:
 
 - **HOME = WorkDir** — agent host state (`.apinfra`, `.env`, `infra/`, `.retries`, `.events`, …) is per-scenario.
 - Prefer **environment stubs** over Go mocks: local `file://` Git, fake `bin/dig` on `PATH`, Pebble, ACME 429 stub.
-- Keep scenarios focused (one behavior). Reuse the alpine/`nc` HTTP stub pattern from existing files.
+- Keep scenarios focused (one behavior). Reuse the `hashicorp/http-echo` stub pattern from existing files (`command: ["-listen=:80", "-text=…"]`).
 - ACME domain scenarios need DNS preflight: ship a tiny `bin/dig` stub and `chmod 0755` + prepend `PATH`.
 - Always stop Pebble / rate-limit / git-authfail servers started in the script (`pebble-stop`, `acme-ratelimit-stop`, `git-authfail-stop`).
 - Match product behavior from `testdata/README.md` (validation soft-fail, cert rollback, port strip/rewrite, events). Do not assert implementation details that the product README does not promise — **except** intentional omissions listed above (e.g. `container_name_target`).

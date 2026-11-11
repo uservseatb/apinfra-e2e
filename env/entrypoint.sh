@@ -49,6 +49,7 @@ pull_with_retry() {
 	return 1
 }
 pull_with_retry alpine:latest
+pull_with_retry hashicorp/http-echo:latest
 
 echo "apinfra-e2e: installing pebble (ACME stub for cert scenarios)"
 go install github.com/letsencrypt/pebble/v2/cmd/pebble@v2.10.1

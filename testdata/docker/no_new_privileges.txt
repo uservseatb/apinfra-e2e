@@ -45,8 +45,8 @@ projects:
 -- git-repo/dev/e2e-harden/docker-compose.yml --
 services:
   web:
-    image: alpine:latest
+    image: hashicorp/http-echo:latest
     privileged: true
-    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    command: ["-listen=:80", "-text=OK"]
 
 -- .env --

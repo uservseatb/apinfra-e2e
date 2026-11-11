@@ -85,13 +85,13 @@ projects:
 -- git-repo/dev/e2e-keep/docker-compose.yml --
 services:
   web:
-    image: alpine:latest
-    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
 
 -- git-repo/dev/e2e-drop/docker-compose.yml --
 services:
   web:
-    image: alpine:latest
-    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
 
 -- .env --

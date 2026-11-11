@@ -40,8 +40,8 @@ projects:
 -- git-repo/dev/e2e-db/docker-compose.yml --
 services:
   postgres:
-    image: alpine:latest
-    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 5432; done"
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:5432", "-text=OK"]
     ports:
       - "5432:5432" # Insecure attempt to expose database to the world
 

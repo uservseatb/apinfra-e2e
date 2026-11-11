@@ -44,13 +44,13 @@ projects:
 -- git-repo/dev/e2e-ports/docker-compose.yml --
 services:
   unbound:
-    image: alpine:latest
-    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
     ports:
       - "18080:80" # no host IP → must become 127.0.0.1:18080
   bound:
-    image: alpine:latest
-    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
     ports:
       - "127.0.0.1:18081:80" # explicit allowed host IP must be preserved
 
