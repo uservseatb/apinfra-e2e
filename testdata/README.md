@@ -1,5 +1,14 @@
 # apinfra
 
+[![Go Version](https://img.shields.io/github/go-mod/go-version/uservseatb/apinfra)](https://github.com/uservseatb/apinfra/blob/main/go.mod)
+[![Latest Release](https://img.shields.io/github/v/release/uservseatb/apinfra)](https://github.com/uservseatb/apinfra/releases/latest)
+[![License](https://img.shields.io/github/license/uservseatb/apinfra)](LICENSE)
+![GitOps](https://img.shields.io/badge/GitOps-%F0%9F%94%80-blue)
+![Docker](https://img.shields.io/badge/Docker-%F0%9F%90%B3-blue)
+![Nginx](https://img.shields.io/badge/Nginx-%F0%9F%9F%A9-green)
+![Let's Encrypt](https://img.shields.io/badge/Let's%20Encrypt-%F0%9F%94%92-brightgreen)
+![ZeroSSL](https://img.shields.io/badge/ZeroSSL-%F0%9F%94%92-blue)
+
 **apinfra** is a lightweight GitOps agent that deploys **docker-compose** apps on a **single host**, with automatic **Nginx** reverse-proxy routing and **Let's Encrypt** / **ZeroSSL** certificates.
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
@@ -19,6 +28,12 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 * **Nginx Reverse Proxy:** Per-project inbound rules in `settings.yml` route public domains (HTTPS/HTTP) or host ports (HTTP, or HTTPS with mock self-signed certs) to containers by Docker DNS name and target port.
 * **Port / host-network exposure guard:** By default, all `ports` mappings and any `network_mode: host` in docker-compose are stripped, so containers are not accidentally published on the host network stack; public access goes only through the managed Nginx routes. When needed, you can still configure port forwarding bound to a specific IP (`allow-ports-mapping: true`).
 * **Lightweight & Fast:** Built with Go — minimal overhead, low memory footprint, and fast execution.
+
+## 🧪 Testing & Stability
+
+Every core mechanic — including configuration validation, Nginx config rollbacks, and ACME certificate downgrades — is covered by comprehensive end-to-end tests.
+Our testing suite runs inside an isolated Linux container to prevent host port collisions (`:80`/`:443`) and uses the official Let's Encrypt **Pebble** CA stub to simulate real-world production ACME failures, rate limits, and DNS preflights.
+👉 Check out the test scenarios and architecture here: **[apinfra-e2e](https://github.com/uservseatb/apinfra-e2e)**
 
 ## How It Works
 
