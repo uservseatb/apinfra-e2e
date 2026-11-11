@@ -17,6 +17,7 @@ First deploy, idempotent re-run, validation soft-fail / leave prior state alone.
 | `happy_path.txt` | First deploy: compose up, proxy, `done duration=` |
 | `idempotency.txt` | Second cycle with unchanged Git leaves stack running |
 | `host_layout_perms.txt` | Full-cycle host path modes (apps/`0700`, compose/`.env` `0400`, nginx/ACME `0755`/`0644`, secrets `0600`); legacy loose modes heal |
+| `pending_markers_cleared.txt` | Healthy deploy + idempotent cycle: `apps/<name>/.apply_pending` and `nginx/.reload_pending` absent; curl through proxy OK |
 | `validation_rollback.txt` | Invalid `settings.yml` soft-fails; prior containers untouched |
 | `git_login_failed.txt` | Config-repo clone HTTP 401 → `git_login_failed`; cycle aborted; prior Docker/Nginx untouched |
 
