@@ -1,0 +1,160 @@
+# Scenario: after a full cycle, every agent-managed host path has the expected
+# mode — private where secrets live, traversable for nginx/ACME bind mounts.
+# Legacy loose modes heal on the next cycle. Modes only (no second-user probes).
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: host layout perms fixture'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+exec chmod 0755 check-perms.sh check-heal.sh
+
+exec apinfra
+stderr 'done duration='
+
+docker-assert-running apinfra_e2ecycle-web
+exists $HOME/infra/apps/e2ecycle/docker-compose.yml
+exists $HOME/infra/apps/e2ecycle/.env
+exists $HOME/infra/docker-compose.yml
+exists $HOME/infra/nginx/nginx.conf
+exists $HOME/infra/nginx/conf/dev_e2ecycle.conf
+exists $HOME/infra/nginx/leconf/options-ssl-nginx.conf
+exists $HOME/apinfra.lock
+grep 'review-secret-sentinel' $HOME/infra/apps/e2ecycle/docker-compose.yml
+
+exec ./check-perms.sh
+stdout 'layout_perms_ok'
+
+# Legacy permissive modes heal on the next unchanged cycle.
+exec chmod 755 $HOME/infra/apps $HOME/infra/apps/e2ecycle
+exec chmod 644 $HOME/infra/apps/e2ecycle/docker-compose.yml $HOME/infra/apps/e2ecycle/.env
+exec chmod 644 $HOME/.apinfra $HOME/.env
+
+exec apinfra
+stderr 'done duration='
+
+exec ./check-heal.sh
+stdout 'layout_heal_ok'
+docker-assert-running apinfra_e2ecycle-web
+grep 'review-secret-sentinel' $HOME/infra/apps/e2ecycle/docker-compose.yml
+
+-- check-perms.sh --
+#!/bin/sh
+set -eu
+
+mode_of() {
+	if stat -c %a "$1" >/dev/null 2>&1; then
+		stat -c %a "$1"
+	else
+		stat -f %Lp "$1"
+	fi
+}
+
+check() {
+	path=$1
+	want=$2
+	got=$(mode_of "$path")
+	# BSD stat may omit a leading zero (e.g. 644 vs 0644); normalize.
+	got=$(printf '%03d' "$got")
+	want=$(printf '%03d' "$want")
+	if [ "$got" != "$want" ]; then
+		echo "FAIL $path got=$got want=$want" >&2
+		exit 1
+	fi
+}
+
+check "$HOME" 755
+check "$HOME/infra" 755
+check "$HOME/infra/nginx" 755
+check "$HOME/infra/nginx/conf" 755
+check "$HOME/infra/nginx/leconf" 755
+check "$HOME/infra/certbot" 755
+check "$HOME/infra/certbot/conf" 755
+check "$HOME/infra/certbot/www" 755
+check "$HOME/infra/mockcerts" 755
+check "$HOME/infra/apps" 700
+check "$HOME/infra/apps/e2ecycle" 700
+check "$HOME/infra/apps/e2ecycle/docker-compose.yml" 400
+check "$HOME/infra/apps/e2ecycle/.env" 400
+check "$HOME/infra/docker-compose.yml" 644
+check "$HOME/infra/nginx/nginx.conf" 644
+check "$HOME/infra/nginx/conf/dev_e2ecycle.conf" 644
+check "$HOME/infra/nginx/leconf/options-ssl-nginx.conf" 644
+check "$HOME/.apinfra" 600
+check "$HOME/.env" 600
+check "$HOME/apinfra.lock" 600
+if [ -f "$HOME/.installedCert" ]; then
+	check "$HOME/.installedCert" 644
+fi
+if [ -f "$HOME/.events" ]; then
+	check "$HOME/.events" 600
+fi
+echo layout_perms_ok
+
+-- check-heal.sh --
+#!/bin/sh
+set -eu
+
+mode_of() {
+	if stat -c %a "$1" >/dev/null 2>&1; then
+		stat -c %a "$1"
+	else
+		stat -f %Lp "$1"
+	fi
+}
+
+check() {
+	path=$1
+	want=$2
+	got=$(mode_of "$path")
+	got=$(printf '%03d' "$got")
+	want=$(printf '%03d' "$want")
+	if [ "$got" != "$want" ]; then
+		echo "FAIL heal $path got=$got want=$want" >&2
+		exit 1
+	fi
+}
+
+check "$HOME/infra/apps" 700
+check "$HOME/infra/apps/e2ecycle" 700
+check "$HOME/infra/apps/e2ecycle/docker-compose.yml" 400
+check "$HOME/infra/apps/e2ecycle/.env" 400
+check "$HOME/.apinfra" 600
+check "$HOME/.env" 600
+check "$HOME/infra/certbot/www" 755
+check "$HOME/infra/nginx/conf" 755
+echo layout_heal_ok
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2ecycle
+    enabled: true
+    proxy:
+      inbound:
+        port: 9975
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2ecycle/docker-compose.yml --
+services:
+  web:
+    image: alpine:latest
+    environment:
+      APP_PASSWORD: ${APP_PASSWORD}
+    command: sh -c "while true; do echo -e 'HTTP/1.1 200 OK\n\n OK' | nc -lk -p 80; done"
+
+-- .env --
+E2ECYCLE_APP_PASSWORD=review-secret-sentinel
