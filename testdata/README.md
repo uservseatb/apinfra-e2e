@@ -68,7 +68,7 @@ Connect to your clean Linux server (Ubuntu) via SSH and execute the following co
 
 ```bash
 # 1. Download the latest package version
-curl -L -O https://github.com/uservseatb/apinfra/releases/download/v0.0.2/apinfra_0.0.2_amd64.deb
+curl -L -O https://github.com/uservseatb/apinfra/releases/download/v0.0.3/apinfra_0.0.3_amd64.deb
 
 # 2. Update package indexes and install
 sudo apt update
@@ -83,10 +83,13 @@ sudo apt install -y ./apinfra_*.deb
 
 ```bash
 # Run from the apinfra project folder on your local computer
-./build/deb/package.sh
+# Requires GoReleaser: https://goreleaser.com/install/
+task package
+# equivalent: goreleaser release --snapshot --clean
 
-# The script will generate a package in the dist directory:
+# Packages land in dist/:
 # → dist/apinfra_<version>_amd64.deb
+# → dist/apinfra_<version>_arm64.deb
 ```
 
 #### Transfer and Install on the Server
