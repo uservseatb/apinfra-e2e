@@ -1,0 +1,125 @@
+# Scenario: docker login fails while apinfra-proxy is already running → nginx and
+# prune are skipped (README docker_login_failed). Regression: previously nginx still
+# ran ("running despite docker errors") and wrote vhosts for apps that never started.
+#
+# Cycle 1: deploy e2e-dskip-a → proxy + nginx conf live.
+# Cycle 2: add e2e-dskip-b in Git + bad registry → login fails;
+#          no nginx for B; A's conf unchanged; no "despite docker errors".
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: baseline with proxy'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra-proxy
+docker-assert-running apinfra_e2e-dskip-a-web
+exists $HOME/infra/nginx/conf/dev_e2e-dskip-a.conf
+exec cp $HOME/infra/nginx/conf/dev_e2e-dskip-a.conf $WORK/conf-a.before
+exec curl -sf http://127.0.0.1:9961/
+stdout 'DSKIP_A'
+
+cd git-repo
+cp ../settings.two.yml dev/settings.yml
+mkdir -p dev/e2e-dskip-b
+cp ../compose.b.yml dev/e2e-dskip-b/docker-compose.yml
+exec git add .
+exec git commit -m 'chore: add second project requiring compose up'
+cd ..
+
+cp .apinfra.bad-registry .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'logging into registry 127.0.0.1:1'
+stderr 'docker login 127.0.0.1:1'
+stderr 'nginx processor: skipped \(docker login failed\)'
+stderr 'pruning skipped \(docker login failed\)'
+! stderr 'running despite docker errors'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+
+exists $HOME/.events
+grep 'docker_login_failed' $HOME/.events
+
+# Compose for B may be on disk; pull/up and nginx must not have applied it.
+exists $HOME/infra/apps/e2e-dskip-b/docker-compose.yml
+! docker-assert-running apinfra_e2e-dskip-b-web
+! exists $HOME/infra/nginx/conf/dev_e2e-dskip-b.conf
+
+exec cmp $WORK/conf-a.before $HOME/infra/nginx/conf/dev_e2e-dskip-a.conf
+docker-assert-running apinfra-proxy
+docker-assert-running apinfra_e2e-dskip-a-web
+exec curl -sf http://127.0.0.1:9961/
+stdout 'DSKIP_A'
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- .apinfra.bad-registry --
+namespace=dev
+repoBranch=main
+containerRegistryHost=127.0.0.1:1
+containerRegistryUser=bad
+containerRegistryToken=bad
+dockerLoginTimeout=5s
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-dskip-a
+    enabled: true
+    proxy:
+      inbound:
+        port: 9961
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- settings.two.yml --
+version: "1.0"
+projects:
+  - name: e2e-dskip-a
+    enabled: true
+    proxy:
+      inbound:
+        port: 9961
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+  - name: e2e-dskip-b
+    enabled: true
+    proxy:
+      inbound:
+        port: 9962
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-dskip-a/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=DSKIP_A"]
+
+-- compose.b.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=DSKIP_B"]
+
+-- .env --

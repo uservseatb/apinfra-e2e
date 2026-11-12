@@ -1,6 +1,6 @@
 # Scenario: full registry credentials + failed docker login → docker_login_failed;
-# compose may be written, but pull/up stop. Prune is skipped. (Nginx is skipped only
-# when apinfra-proxy is not already running on the Docker host.)
+# compose may be written, but pull/up stop; nginx and prune are skipped (README).
+# First cycle (proxy not yet up). See docker_login_skips_nginx.txt for proxy-up case.
 #
 # Project name is unique so leftover host containers from other scenarios
 # (e.g. apinfra_e2e-web-web-1) do not false-positive the "! running" assert.
@@ -20,17 +20,20 @@ exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
 exec apinfra
 stderr 'logging into registry 127.0.0.1:1'
 stderr 'docker login 127.0.0.1:1'
+stderr 'nginx processor: skipped \(docker login failed\)'
+stderr 'pruning skipped \(docker login failed\)'
+! stderr 'running despite docker errors'
 stderr 'WARN cycle finished with errors'
-stderr 'pruning skipped'
 stderr 'done duration='
 
 exists $HOME/.events
 grep 'docker_login_failed' $HOME/.events
 grep '127.0.0.1:1' $HOME/.events
 
-# Compose may already be on disk; this cycle must not have started the app.
+# Compose may already be on disk; this cycle must not have started the app or nginx.
 exists $HOME/infra/apps/e2e-dlogin/docker-compose.yml
 ! docker-assert-running apinfra_e2e-dlogin-web
+! exists $HOME/infra/nginx/conf/dev_e2e-dlogin.conf
 
 -- .apinfra.template --
 namespace=dev
