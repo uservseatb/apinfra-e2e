@@ -1,0 +1,123 @@
+# Scenario: failed apply after proxy compose change keeps the old proxy; next cycle
+# retries without a new Git commit once the host dependency is fixed (proxy REL-01).
+#
+# Cycle 1: deploy e2e-ppend on inbound :9973 → apinfra-proxy up; curl OK.
+# Cycle 2: Git inbound.port → :9974 + bad registry → login fails;
+#          infra/.apply_pending stays; same proxy cid; :9973 still serves, :9974 dead.
+# Cycle 3: fix .apinfra only (no Git) → proxy pull/up; pending cleared; curl :9974.
+# Cycle 4: unchanged → still on :9974.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: proxy apply pending baseline'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra-proxy
+docker-assert-running apinfra_e2e-ppend-web
+! exists $HOME/infra/.apply_pending
+exec curl -sf http://127.0.0.1:9973/
+stdout 'PPEND_OK'
+
+exec sh -c 'docker ps -aq --filter name=apinfra-proxy > $WORK/old-proxy-cid'
+exec sh -c 'test -s $WORK/old-proxy-cid'
+
+cd git-repo
+cp ../settings.port-b.yml dev/settings.yml
+exec git add .
+exec git commit -m 'chore: inbound port change for proxy pending retry'
+cd ..
+
+# Bad registry so login fails after the proxy compose change is staged.
+cp .apinfra.bad-registry .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'logging into registry 127.0.0.1:1'
+stderr 'docker login 127.0.0.1:1'
+stderr 'plan proxy=compose_changed'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+
+exists $HOME/infra/.apply_pending
+docker-assert-running apinfra-proxy
+exec sh -c 'test "$(docker ps -aq --filter name=apinfra-proxy)" = "$(cat $WORK/old-proxy-cid)"'
+exec curl -sf http://127.0.0.1:9973/
+stdout 'PPEND_OK'
+! exec curl -sf --connect-timeout 2 http://127.0.0.1:9974/
+
+# Recover host dependency without another Git commit.
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'plan proxy=apply_pending'
+stderr 'done duration='
+docker-assert-running apinfra-proxy
+exec sh -c 'test "$(docker ps -aq --filter name=apinfra-proxy)" != "$(cat $WORK/old-proxy-cid)"'
+! exists $HOME/infra/.apply_pending
+exec curl -sf http://127.0.0.1:9974/
+stdout 'PPEND_OK'
+! exec curl -sf --connect-timeout 2 http://127.0.0.1:9973/
+
+exec apinfra
+stderr 'plan proxy=skip'
+stderr 'done duration='
+docker-assert-running apinfra-proxy
+! exists $HOME/infra/.apply_pending
+exec curl -sf http://127.0.0.1:9974/
+stdout 'PPEND_OK'
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- .apinfra.bad-registry --
+namespace=dev
+repoBranch=main
+containerRegistryHost=127.0.0.1:1
+containerRegistryUser=bad
+containerRegistryToken=bad
+dockerLoginTimeout=5s
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-ppend
+    enabled: true
+    proxy:
+      inbound:
+        port: 9973
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- settings.port-b.yml --
+version: "1.0"
+projects:
+  - name: e2e-ppend
+    enabled: true
+    proxy:
+      inbound:
+        port: 9974
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-ppend/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=PPEND_OK"]
+-- .env --

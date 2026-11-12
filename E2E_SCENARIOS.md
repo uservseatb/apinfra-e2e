@@ -17,7 +17,7 @@ First deploy, idempotent re-run, validation soft-fail / leave prior state alone.
 | `happy_path.txt` | First deploy: compose up, proxy, `done duration=` |
 | `idempotency.txt` | Second cycle with unchanged Git leaves stack running |
 | `host_layout_perms.txt` | Full-cycle host path modes (apps/`0700`, compose/`.env` `0400`, nginx/ACME `0755`/`0644`, secrets `0600`); legacy loose modes heal |
-| `pending_markers_cleared.txt` | Healthy deploy + idempotent cycle: `apps/<name>/.apply_pending` and `nginx/.reload_pending` absent; curl through proxy OK |
+| `pending_markers_cleared.txt` | Healthy deploy + idempotent cycle: `infra/.apply_pending`, `apps/<name>/.apply_pending`, and `nginx/.reload_pending` absent; curl through proxy OK |
 | `validation_rollback.txt` | Invalid `settings.yml` soft-fails; prior containers untouched |
 | `git_login_failed.txt` | Config-repo clone HTTP 401 → `git_login_failed`; cycle aborted; prior Docker/Nginx untouched |
 
@@ -33,6 +33,7 @@ Ports, `network_mode`, volumes/socket policy, healing, enabling/disabling projec
 | `docker_login_failed.txt` | Full registry creds + failed `docker login` → `docker_login_failed`; compose written; no app up; nginx + prune skipped |
 | `docker_login_skips_nginx.txt` | Proxy already up; add project + failed login → nginx skipped (no conf for new app; prior conf unchanged); no "despite docker errors" |
 | `apply_pending_retry.txt` | Compose change + failed login keeps same container on V1; fix host registry (no Git) → next cycle recreates container serving V2; fourth cycle stays on V2 |
+| `proxy_apply_pending_retry.txt` | Proxy inbound.port change + failed login keeps same `apinfra-proxy` cid and old port; `infra/.apply_pending` stays; fix host registry (no Git) → next cycle restarts proxy on new port and clears pending |
 | `network_mode_stripped.txt` | Any custom `network_mode` (`host`, `bridge`, …) stripped before start; written compose has none |
 | `heal_deleted_container.txt` | Two projects; `docker rm` one service in a 2-container stack → next cycle recreates it |
 | `heal_stopped_container.txt` | Two projects; `docker stop` one service in a 2-container stack → next cycle starts it again |

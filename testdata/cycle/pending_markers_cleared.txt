@@ -1,5 +1,6 @@
 # Scenario: after a successful compose up and nginx reload, pending markers are gone.
-# Healthy cycle must not leave apps/<name>/.apply_pending or nginx/.reload_pending.
+# Healthy cycle must not leave infra/.apply_pending, apps/<name>/.apply_pending,
+# or nginx/.reload_pending.
 
 cd git-repo
 exec git init -b main
@@ -18,6 +19,7 @@ stderr 'done duration='
 docker-assert-running apinfra_e2e-pendclr-web
 exec curl -sf http://127.0.0.1:9972/
 stdout 'PENDCLR_OK'
+! exists $HOME/infra/.apply_pending
 ! exists $HOME/infra/apps/e2e-pendclr/.apply_pending
 ! exists $HOME/infra/nginx/.reload_pending
 
@@ -26,6 +28,7 @@ stderr 'done duration='
 docker-assert-running apinfra_e2e-pendclr-web
 exec curl -sf http://127.0.0.1:9972/
 stdout 'PENDCLR_OK'
+! exists $HOME/infra/.apply_pending
 ! exists $HOME/infra/apps/e2e-pendclr/.apply_pending
 ! exists $HOME/infra/nginx/.reload_pending
 
