@@ -1,5 +1,5 @@
 # Scenario: DNS preflight skip — empty dig +short skips ACME for this cycle only.
-# No retry bump, no mode downgrade, no .installedCert; apps still come up.
+# No retry bump, no mode downgrade, no .certs.json; apps still come up.
 # ACME is pointed at a closed port so a broken dig stub cannot accidentally issue.
 
 cd git-repo
@@ -27,7 +27,7 @@ stderr 'done duration='
 ! exists $HOME/infra/certbot/conf/live/e2e-dns.apinfra.test/fullchain.pem
 ! exists $HOME/.retries
 ! exists $HOME/.downgradeCertMode
-! exists $HOME/.installedCert
+! exists $HOME/.certs.json
 ! exists $HOME/.events
 docker-assert-running apinfra_e2e-web-web-1
 

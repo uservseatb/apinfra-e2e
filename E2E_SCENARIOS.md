@@ -56,7 +56,7 @@ Proxy conf write / restore / port TLS.
 |------|--------|
 | `nginx_conf_rollback.txt` | Failed ACME after conf rewrite restores prior nginx conf |
 | `port_mock_https.txt` | `inbound.port` + `cert-issue-type: mock` → `listen … ssl` + `mockcerts/port-<port>/` |
-| `domain_http_none.txt` | Domain + `cert-issue-type: none` → plain HTTP `:80`, no TLS/redirect; `.installedCert` → `none` |
+| `domain_http_none.txt` | Domain + `cert-issue-type: none` → plain HTTP `:80`, no TLS/redirect; `.certs.json` `active_mode` → `none` |
 | `domain_prod_switch_fail_keeps_proxy.txt` | Prod domain A live (curl); switch to B + non-429 ACME fail → block B, rollback conf A, curl A still OK |
 | `proxy_stops_after_project_removed.txt` | Remove project from settings → down + conf gone; curl old port fails, sibling port still OK |
 | `proxy_stops_after_project_disabled.txt` | `enabled: false` → down + conf gone; curl old port fails, sibling port still OK |
@@ -68,13 +68,16 @@ Issue, fallback, downgrade, retries, DNS preflight, mock self-signed.
 
 | File | Covers |
 |------|--------|
-| `acme_cert_happy_path.txt` | Pebble/EAB issue in prod; PEMs under `certbot/conf/live/` |
+| `acme_cert_happy_path.txt` | Pebble/EAB issue in prod; PEMs under `certbot/conf/live/`; `.certs.json` has `active_mode` + `certs.prod` PEM cache + accounts |
 | `acme_downgrade.txt` | Rate-limit → `.downgradeCertMode` prod→test; next cycle issues test |
 | `acme_le_zerossl_fallback.txt` | LE 429 → ZeroSSL (Pebble) secondary keeps prod (no downgrade) |
 | `cert_issue_failed.txt` | Non–rate-limit ACME fail → `.retries` block + `cert_issue_failed`; next cycle skips CA |
-| `dns_preflight_skip.txt` | Empty `dig +short` skips ACME for the cycle (no retry / downgrade / `.installedCert`) |
+| `dns_preflight_skip.txt` | Empty `dig +short` skips ACME for the cycle (no retry / downgrade / `.certs.json`) |
 | `dns_preflight_public_ip.txt` | Configured `certs.publicIP` matches or mismatches dig IP -> pass or skip cycle |
 | `mock_domain_cert.txt` | Domain + `mock` → local PEMs under `mockcerts/<domain>/` (no ACME); nginx HTTPS |
+| `prod_mode_switch_retains.txt` | Intentional `prod → test → prod`: staging on disk mid-step; prod restored from `.certs.json` without second obtain |
+| `certs_json_cold_restore.txt` | Delete `live/` PEMs; next cycle materializes from `.certs.json` without ACME obtain |
+| `prod_soft_ttl_reissue.txt` | Backdate `issued_at` past soft TTL (live PEMs + prod cache kept); `proxyReadyAfter=1s` → second ACME obtain (not restore) |
 
 ### `env/` — Host / project environment
 

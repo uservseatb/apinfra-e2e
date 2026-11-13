@@ -68,7 +68,9 @@ grep 'cert_issue_failed' $HOME/.events
 # Previous prod conf / cert for A must still be what nginx serves.
 grep 'server_name e2e-keep\.apinfra\.test' $HOME/infra/nginx/conf/dev_e2e-web.conf
 ! grep 'server_name e2e-bad\.apinfra\.test' $HOME/infra/nginx/conf/dev_e2e-web.conf
-grep 'e2e-keep\.apinfra\.test=.*\|prod' $HOME/.installedCert
+exists $HOME/.certs.json
+grep 'e2e-keep\.apinfra\.test' $HOME/.certs.json
+grep '"active_mode": "prod"' $HOME/.certs.json
 exists $HOME/infra/certbot/conf/live/e2e-keep.apinfra.test/fullchain.pem
 docker-assert-running apinfra_e2e-web-web-1
 

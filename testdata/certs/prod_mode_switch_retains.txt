@@ -1,0 +1,130 @@
+# Scenario: intentional prod → test → prod keeps prod PEMs in .certs.json and
+# restores them without a second production ACME obtain.
+
+pebble-start
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: prod mode switch retain fixture'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+chmod 0755 bin/dig
+env PATH=$WORK/bin:$PATH
+
+exec apinfra
+stderr 'cert issued name=e2e-retain.apinfra.test mode=prod'
+stderr 'done duration='
+exists $HOME/infra/certbot/conf/live/e2e-retain.apinfra.test/fullchain.pem
+exists $HOME/.certs.json
+grep '"certificate":' $HOME/.certs.json
+cp $HOME/infra/certbot/conf/live/e2e-retain.apinfra.test/fullchain.pem $WORK/prod-fullchain.pem
+
+cd git-repo
+cp ../settings.test.yml dev/settings.yml
+exec git add dev/settings.yml
+exec git commit -m 'chore: switch cert-issue-type to test'
+cd ..
+
+env PATH=$WORK/bin:$PATH
+# apinfra-proxy must be up >= 30s (proxyReadyAfter) when conf is unchanged.
+exec sleep 35
+exec apinfra
+stderr 'cert issued name=e2e-retain.apinfra.test mode=test'
+stderr 'done duration='
+grep '"active_mode": "test"' $HOME/.certs.json
+grep '"certificate":' $HOME/.certs.json
+exists $HOME/infra/certbot/conf/live/e2e-retain.apinfra.test/.issued-mode
+grep 'test' $HOME/infra/certbot/conf/live/e2e-retain.apinfra.test/.issued-mode
+
+cd git-repo
+cp ../settings.prod.yml dev/settings.yml
+exec git add dev/settings.yml
+exec git commit -m 'chore: switch cert-issue-type back to prod'
+cd ..
+
+env PATH=$WORK/bin:$PATH
+exec sleep 35
+exec apinfra
+stderr 'restored prod cert from cache name=e2e-retain.apinfra.test'
+! stderr 'obtaining domain=e2e-retain.apinfra.test mode=prod'
+stderr 'done duration='
+grep '"active_mode": "prod"' $HOME/.certs.json
+grep 'prod' $HOME/infra/certbot/conf/live/e2e-retain.apinfra.test/.issued-mode
+exec cmp $WORK/prod-fullchain.pem $HOME/infra/certbot/conf/live/e2e-retain.apinfra.test/fullchain.pem
+docker-assert-running apinfra_e2e-web-web-1
+
+pebble-stop
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+certs.provider=zerossl
+certs.zerossl.AcmeKid=kid-1
+certs.zerossl.AcmeHmac=zWNDZM6eQGHWpSRTPal5eIUYFTu7EajVIoguysqZ9wG44nMEtx3MUAsUDkMTQ12W
+certs.zerossl.directory=https://127.0.0.1:14000/dir
+certs.letsencrypt.directory=https://127.0.0.1:14000/dir
+certs.letsencrypt.stagingDirectory=https://127.0.0.1:14000/dir
+
+-- settings.prod.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        domain-name: e2e-retain.apinfra.test
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: prod
+      cert-acme-email: e2e@apinfra.local
+
+-- settings.test.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        domain-name: e2e-retain.apinfra.test
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: test
+      cert-acme-email: e2e@apinfra.local
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        domain-name: e2e-retain.apinfra.test
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: prod
+      cert-acme-email: e2e@apinfra.local
+
+-- git-repo/dev/e2e-web/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
+    container_name: e2e-web-container
+
+-- bin/dig --
+#!/bin/sh
+echo '127.0.0.1'
+
+-- .env --

@@ -23,6 +23,12 @@ stderr 'done duration='
 
 exists $HOME/infra/certbot/conf/live/e2e-cert.apinfra.test/fullchain.pem
 exists $HOME/infra/certbot/conf/live/e2e-cert.apinfra.test/privkey.pem
+exists $HOME/.certs.json
+grep 'e2e-cert\.apinfra\.test' $HOME/.certs.json
+grep '"active_mode": "prod"' $HOME/.certs.json
+grep '"certificate":' $HOME/.certs.json
+grep '"private_key":' $HOME/.certs.json
+grep '"accounts"' $HOME/.certs.json
 ! exists $HOME/.downgradeCertMode
 docker-assert-running apinfra_e2e-web-web-1
 

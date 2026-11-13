@@ -30,7 +30,7 @@ stderr 'skip cert issue name=e2e-dns.apinfra.test'
 ! exists $HOME/infra/certbot/conf/live/e2e-dns.apinfra.test/fullchain.pem
 ! exists $HOME/.retries
 ! exists $HOME/.downgradeCertMode
-! exists $HOME/.installedCert
+! exists $HOME/.certs.json
 ! exists $HOME/.events
 docker-assert-running apinfra_e2e-web-web-1
 

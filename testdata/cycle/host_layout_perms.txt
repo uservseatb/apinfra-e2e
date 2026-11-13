@@ -88,8 +88,8 @@ check "$HOME/infra/nginx/leconf/options-ssl-nginx.conf" 644
 check "$HOME/.apinfra" 600
 check "$HOME/.env" 600
 check "$HOME/apinfra.lock" 600
-if [ -f "$HOME/.installedCert" ]; then
-	check "$HOME/.installedCert" 644
+if [ -f "$HOME/.certs.json" ]; then
+	check "$HOME/.certs.json" 600
 fi
 if [ -f "$HOME/.events" ]; then
 	check "$HOME/.events" 600

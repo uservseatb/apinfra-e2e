@@ -1,0 +1,167 @@
+# Scenario: soft TTL expiry with live PEMs + prod cache still present must
+# re-issue via ACME (not restore from .certs.json). Guards the old bug where
+# NotAfter kept restore forever and reset the soft TTL clock.
+# Soft TTL is expired by backdating issued_at in ~/.certs.json (no wall sleep).
+
+pebble-start
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: prod soft TTL reissue fixture'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+chmod 0755 bin/dig
+env PATH=$WORK/bin:$PATH
+
+exec apinfra
+stderr 'obtaining domain=e2e-renew.apinfra.test mode=prod'
+stderr 'cert issued name=e2e-renew.apinfra.test mode=prod'
+stderr 'done duration='
+
+exists $HOME/infra/certbot/conf/live/e2e-renew.apinfra.test/fullchain.pem
+exists $HOME/.certs.json
+grep '"active_mode": "prod"' $HOME/.certs.json
+grep '"certificate":' $HOME/.certs.json
+cp $HOME/infra/certbot/conf/live/e2e-renew.apinfra.test/fullchain.pem $WORK/prod-fullchain-before.pem
+
+# Leave live PEMs and prod PEM cache in place; only age issued_at past soft TTL:
+# issued_at = now - (cert-update-time-sec + 30m). 5184000 = default prod update window.
+exec go run ./age_certs_issued.go $HOME/.certs.json e2e-renew.apinfra.test 5184000
+
+# Quiet cycle (conf unchanged): ACME needs proxyReadyAfter. Template sets 1s.
+env PATH=$WORK/bin:$PATH
+exec apinfra
+stderr 'obtaining domain=e2e-renew.apinfra.test mode=prod'
+stderr 'cert issued name=e2e-renew.apinfra.test mode=prod'
+! stderr 'restored prod cert from cache'
+stderr 'done duration='
+
+exists $HOME/infra/certbot/conf/live/e2e-renew.apinfra.test/fullchain.pem
+grep 'prod' $HOME/infra/certbot/conf/live/e2e-renew.apinfra.test/.issued-mode
+! exec cmp $WORK/prod-fullchain-before.pem $HOME/infra/certbot/conf/live/e2e-renew.apinfra.test/fullchain.pem
+docker-assert-running apinfra_e2e-web-web-1
+
+pebble-stop
+
+-- age_certs_issued.go --
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"strconv"
+	"time"
+)
+
+func main() {
+	if len(os.Args) != 4 {
+		fmt.Fprintf(os.Stderr, "usage: age_certs_issued <certs.json> <domain> <cert-update-time-sec>\n")
+		os.Exit(2)
+	}
+
+	path, domain := os.Args[1], os.Args[2]
+	updateSec, err := strconv.ParseInt(os.Args[3], 10, 64)
+	if err != nil {
+		fatal(fmt.Errorf("cert-update-time-sec: %w", err))
+	}
+	if updateSec <= 0 {
+		fatal(fmt.Errorf("cert-update-time-sec must be > 0, got %d", updateSec))
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		fatal(err)
+	}
+
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		fatal(err)
+	}
+
+	certs, ok := doc["certificates"].(map[string]any)
+	if !ok {
+		fatal(fmt.Errorf("missing certificates object"))
+	}
+
+	entry, ok := certs[domain].(map[string]any)
+	if !ok {
+		fatal(fmt.Errorf("missing domain %s", domain))
+	}
+
+	byType, ok := entry["certs"].(map[string]any)
+	if !ok {
+		fatal(fmt.Errorf("missing certs map for %s", domain))
+	}
+
+	ageBy := time.Duration(updateSec)*time.Second + 30*time.Minute
+	aged := time.Now().UTC().Add(-ageBy).Format(time.RFC3339Nano)
+	for name, rawType := range byType {
+		typeCert, ok := rawType.(map[string]any)
+		if !ok {
+			fatal(fmt.Errorf("certs.%s is not an object", name))
+		}
+		typeCert["issued_at"] = aged
+		byType[name] = typeCert
+	}
+
+	out, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		fatal(err)
+	}
+	out = append(out, '\n')
+
+	if err := os.WriteFile(path, out, 0o600); err != nil {
+		fatal(err)
+	}
+}
+
+func fatal(err error) {
+	fmt.Fprintf(os.Stderr, "age_certs_issued: %v\n", err)
+	os.Exit(1)
+}
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+proxyReadyAfter=1s
+certs.provider=zerossl
+certs.zerossl.AcmeKid=kid-1
+certs.zerossl.AcmeHmac=zWNDZM6eQGHWpSRTPal5eIUYFTu7EajVIoguysqZ9wG44nMEtx3MUAsUDkMTQ12W
+certs.zerossl.directory=https://127.0.0.1:14000/dir
+certs.letsencrypt.directory=https://127.0.0.1:14000/dir
+certs.letsencrypt.stagingDirectory=https://127.0.0.1:14000/dir
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        domain-name: e2e-renew.apinfra.test
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: prod
+      cert-acme-email: e2e@apinfra.local
+
+-- git-repo/dev/e2e-web/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
+    container_name: e2e-web-container
+
+-- bin/dig --
+#!/bin/sh
+echo '127.0.0.1'
+
+-- .env --

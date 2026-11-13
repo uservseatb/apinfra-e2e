@@ -1,5 +1,5 @@
 # Scenario: domain inbound + cert-issue-type none → plain HTTP (no TLS / no redirect).
-# README: domain-name with none updates .installedCert to none; nginx listens on :80.
+# README: domain-name with none updates .certs.json mode to none; nginx listens on :80.
 
 cd git-repo
 exec git init -b main
@@ -16,7 +16,9 @@ exec apinfra
 stderr 'setting cert mode name=e2e-http\.apinfra\.test \(absent -> none\)'
 stderr 'done duration='
 
-grep 'e2e-http\.apinfra\.test=.*\|none' $HOME/.installedCert
+exists $HOME/.certs.json
+grep 'e2e-http\.apinfra\.test' $HOME/.certs.json
+grep '"active_mode": "none"' $HOME/.certs.json
 
 exists $HOME/infra/nginx/conf/dev_e2e-web.conf
 grep 'server_name e2e-http\.apinfra\.test' $HOME/infra/nginx/conf/dev_e2e-web.conf

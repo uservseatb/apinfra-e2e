@@ -1,0 +1,80 @@
+# Scenario: cold restore — valid prod PEMs in .certs.json, empty live/ →
+# materialize without ACME obtain.
+
+pebble-start
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: certs.json cold restore fixture'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+chmod 0755 bin/dig
+env PATH=$WORK/bin:$PATH
+
+exec apinfra
+stderr 'cert issued name=e2e-cold.apinfra.test mode=prod'
+stderr 'done duration='
+exists $HOME/.certs.json
+cp $HOME/.certs.json $WORK/certs.json.bak
+cp $HOME/infra/certbot/conf/live/e2e-cold.apinfra.test/fullchain.pem $WORK/prod-fullchain.pem
+
+rm -rf $HOME/infra/certbot/conf/live/e2e-cold.apinfra.test
+! exists $HOME/infra/certbot/conf/live/e2e-cold.apinfra.test/fullchain.pem
+
+env PATH=$WORK/bin:$PATH
+exec apinfra
+stderr 'restored prod cert from cache name=e2e-cold.apinfra.test'
+! stderr 'obtaining domain=e2e-cold.apinfra.test mode=prod'
+stderr 'done duration='
+
+exists $HOME/infra/certbot/conf/live/e2e-cold.apinfra.test/fullchain.pem
+exists $HOME/infra/certbot/conf/live/e2e-cold.apinfra.test/privkey.pem
+grep 'prod' $HOME/infra/certbot/conf/live/e2e-cold.apinfra.test/.issued-mode
+exec cmp $WORK/prod-fullchain.pem $HOME/infra/certbot/conf/live/e2e-cold.apinfra.test/fullchain.pem
+docker-assert-running apinfra_e2e-web-web-1
+
+pebble-stop
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+certs.provider=zerossl
+certs.zerossl.AcmeKid=kid-1
+certs.zerossl.AcmeHmac=zWNDZM6eQGHWpSRTPal5eIUYFTu7EajVIoguysqZ9wG44nMEtx3MUAsUDkMTQ12W
+certs.zerossl.directory=https://127.0.0.1:14000/dir
+certs.letsencrypt.directory=https://127.0.0.1:14000/dir
+certs.letsencrypt.stagingDirectory=https://127.0.0.1:14000/dir
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-web
+    enabled: true
+    proxy:
+      inbound:
+        domain-name: e2e-cold.apinfra.test
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: prod
+      cert-acme-email: e2e@apinfra.local
+
+-- git-repo/dev/e2e-web/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
+    container_name: e2e-web-container
+
+-- bin/dig --
+#!/bin/sh
+echo '127.0.0.1'
+
+-- .env --
