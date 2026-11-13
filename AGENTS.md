@@ -75,6 +75,7 @@ Scenarios live in **theme subdirectories** — exactly one level: `testdata/<the
 | `nginx/` | `e2e/nginx_test.go` | `TestE2eNginx` | Nginx proxy conf write / rollback |
 | `certs/` | `e2e/certs_test.go` | `TestE2eCerts` | Certificate issuance: ACME, fallback, downgrade, retries, DNS preflight |
 | `env/` | `e2e/env_test.go` | `TestE2eEnv` | Host `.env` prefix override + sidecar Java-style key normalization |
+| `security/` | `e2e/security_test.go` | `TestE2eSecurity` | Credential hygiene: URL userinfo and registry token must not leak into logs/events/files |
 
 When adding a scenario, place it under the matching theme. If none fit and the new area is substantial, introduce a new top-level theme, add `e2e/<theme>_test.go` with `TestE2e<Theme>`, and document it here and in `E2E_SCENARIOS.md` in the same change.
 

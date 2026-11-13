@@ -1,0 +1,24 @@
+# Redaction only — not a real GitHub clone.
+# URL shape: token@host. Wrong token → 401 from git-authfail.
+# useExecLogs=true; assert userinfo masked as ***@host and sentinel absent.
+
+git-authfail-start
+
+cp .apinfra.secret .apinfra
+
+exec apinfra
+stderr 'http://\*\*\*@'
+! stderr 'ghp_TokUserinfoOnly99'
+stderr 'done duration='
+
+! exec grep -R --exclude='.apinfra*' ghp_TokUserinfoOnly99 $HOME
+
+git-authfail-stop
+
+-- .apinfra.secret --
+namespace=dev
+repoBranch=main
+repo=http://ghp_TokUserinfoOnly99@127.0.0.1:18081/repo
+useExecLogs=true
+
+-- .env --

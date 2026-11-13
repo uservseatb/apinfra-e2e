@@ -62,8 +62,9 @@ func startGitAuthFailServer() error {
 	gitAuthFailMu.Lock()
 	defer gitAuthFailMu.Unlock()
 
+	// Idempotent: a prior scenario may have left the stub up after a mid-script fail.
 	if gitAuthFailServer != nil {
-		return fmt.Errorf("git auth-fail stub already running")
+		return nil
 	}
 
 	mux := http.NewServeMux()

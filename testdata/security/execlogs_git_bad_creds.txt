@@ -1,0 +1,27 @@
+# useExecLogs=true + wrong git user/password in URL userinfo.
+# Clone uses go-git (not shell exec), so [exec] may be absent; still enable the
+# flag and assert the password sentinel never appears while ***@host is logged.
+
+git-authfail-start
+
+cp .apinfra.secret .apinfra
+
+exec apinfra
+stderr 'http://\*\*\*@127.0.0.1:18081/repo'
+! stderr 'GitBadPassSentinel99'
+! stderr '\[exec\].*GitBadPassSentinel99'
+stderr 'git authentication failed'
+stderr 'done duration='
+
+! exec grep -R --exclude='.apinfra*' GitBadPassSentinel99 $HOME
+
+git-authfail-stop
+
+-- .apinfra.secret --
+namespace=dev
+repoBranch=main
+repo=http://baduser:GitBadPassSentinel99@127.0.0.1:18081/repo
+repoToken=GitBadPassSentinel99
+useExecLogs=true
+
+-- .env --

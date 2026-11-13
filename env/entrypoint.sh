@@ -70,6 +70,7 @@ theme_to_run() {
 	nginx) echo TestE2eNginx ;;
 	certs|cert) echo TestE2eCerts ;;
 	env) echo TestE2eEnv ;;
+	security) echo TestE2eSecurity ;;
 	*) return 1 ;;
 	esac
 }
@@ -123,7 +124,7 @@ while [[ "${i}" -le "$#" ]]; do
 	path="${arg#./}"
 	path="${path#testdata/}"
 
-	# Bare theme: cycle|docker|nginx|certs (cert → certs)
+	# Bare theme: cycle|docker|nginx|certs|env|security (cert → certs)
 	if run_name="$(theme_to_run "${path}")"; then
 		if [[ -n "${theme}" ]]; then
 			echo "apinfra-e2e: multiple themes: ${theme} and ${path}" >&2

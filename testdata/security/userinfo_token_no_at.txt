@@ -1,0 +1,21 @@
+# Redaction only — not a real GitHub clone.
+# Malformed URL: token as host, no @. Dial/DNS fails.
+# useExecLogs=true; assert whole URL + bare PAT masked, sentinel absent.
+
+cp .apinfra.secret .apinfra
+
+exec apinfra
+stderr 'http://\*\*\*'
+! stderr 'ghp_TokNoAtSign99'
+stderr 'done duration='
+
+! exec grep -R --exclude='.apinfra*' ghp_TokNoAtSign99 $HOME
+
+-- .apinfra.secret --
+namespace=dev
+repoBranch=main
+repo=http://ghp_TokNoAtSign99/127.0.0.1:18081/repo
+gitTimeout=5s
+useExecLogs=true
+
+-- .env --

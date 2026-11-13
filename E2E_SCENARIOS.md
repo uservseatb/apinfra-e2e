@@ -87,3 +87,18 @@ Host `.env` project-prefix injection and sidecar `.env` key normalization.
 |------|--------|
 | `host_overrides_sidecar.txt` | `STOREFRONT_MARKER` on host overrides sidecar `MARKER` in `infra/apps/storefront/.env` |
 | `sidecar_dot_normalize.txt` | Sidecar `web.image.tag` → `WEB_IMAGE_TAG` in applied project `.env` |
+
+### `security/` — Credential hygiene in logs and host files
+
+Redaction tests only: sentinels must not appear in stderr or agent-written `$HOME` files (input `.apinfra*` excluded). All scenarios set `useExecLogs=true` so credential checks cover `[exec]` journaling too. Local `git-authfail` (HTTP 401) is only a fast soft-fail trigger — these scenarios do **not** assert a successful clone or real GitHub auth.
+
+| File | Covers |
+|------|--------|
+| `userinfo_password.txt` | Wrong `user:password@host` (+ `repoToken`) + `useExecLogs` → `http://***@host/...` |
+| `userinfo_token_only.txt` | Wrong `token@host` + `useExecLogs` → `http://***@host/...` |
+| `userinfo_token_as_password.txt` | Wrong `x-access-token:token@host` + `useExecLogs` → `http://***@host/...` |
+| `userinfo_token_no_at.txt` | Malformed `http://ghp_…/host/repo` (no `@`) + `useExecLogs` → `http://***` + bare PAT scrubbed |
+| `userinfo_at_in_password.txt` | Wrong password containing `@` + `useExecLogs` → `http://***@host/...` (last `@`) |
+| `execlogs_git_bad_creds.txt` | Wrong git user/password + `useExecLogs`; sentinel absent (clone is go-git, not shell exec) |
+| `registry_token.txt` | Wrong registry token + `useExecLogs`; `[exec] … docker login … --password-stdin` without sentinel |
+| `execlogs_registry_bad_creds.txt` | Wrong registry user/password + `useExecLogs`; asserts `[exec]` / `FAIL` cmd lines, no password in logs |
