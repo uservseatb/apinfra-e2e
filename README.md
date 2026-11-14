@@ -23,6 +23,8 @@ Scenarios live under `testdata/` and are grouped by theme:
 | `docker/` | Compose ports, `network_mode`, heal, enable/disable projects |
 | `nginx/` | Proxy conf write / rollback |
 | `certs/` | ACME issue, fallback, downgrade, retries, DNS preflight |
+| `env/` | Host `.env` prefix override + sidecar Java-style key normalization |
+| `security/` | Credential hygiene: URL userinfo and registry token must not leak |
 
 Full inventory: [`E2E_SCENARIOS.md`](E2E_SCENARIOS.md).  
 Product behavior contract (synced from apinfra): [`testdata/README.md`](testdata/README.md).
@@ -41,7 +43,7 @@ task e2e     # build DinD image, run tests inside
 task fmt
 task vet
 
-# One theme: cycle | docker | nginx | certs | env
+# One theme: cycle | docker | nginx | certs | env | security
 task e2e -- docker
 
 # One scenario: testdata/<theme>/<name>.txt

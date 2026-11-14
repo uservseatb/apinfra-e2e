@@ -34,7 +34,7 @@ task fmt
 task vet
 
 # Filter by theme or single scenario (args after -- → DinD go test):
-task e2e -- docker                 # cycle|docker|nginx|certs|env
+task e2e -- docker                 # cycle|docker|nginx|certs|env|security
 task e2e -- cycle/happy_path       # one testdata/<theme>/<name>.txt
 ```
 
