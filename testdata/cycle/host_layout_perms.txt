@@ -157,4 +157,4 @@ services:
     command: ["-listen=:80", "-text=OK"]
 
 -- .env --
-E2ECYCLE_APP_PASSWORD=review-secret-sentinel
+E2ECYCLE__APP_PASSWORD=review-secret-sentinel

@@ -1,5 +1,5 @@
-# Scenario: host .env STOREFRONT_* overrides the same key from project sidecar .env.
-# README: host value wins; prefix stripped before write to infra/apps/<project>/.env.
+# Scenario: host .env STOREFRONT__* overrides the same key from project sidecar .env.
+# README: host value wins; TO_UPPER(name)__ prefix stripped before write to infra/apps/<project>/.env.
 
 cd git-repo
 exec git init -b main
@@ -48,4 +48,4 @@ services:
 MARKER=from-sidecar
 
 -- .env --
-STOREFRONT_MARKER=from-host
+STOREFRONT__MARKER=from-host

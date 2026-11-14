@@ -1,0 +1,75 @@
+# Scenario: nested project names (app / app_billing) do not share host secrets.
+# README: host keys use TO_UPPER(name)__; APP_BILLING__TOKEN must not appear in app as BILLING_TOKEN.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: app and app_billing'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'done duration='
+
+docker-assert-running apinfra_app-web
+docker-assert-running apinfra_app_billing-web
+
+exists $HOME/infra/apps/app/.env
+exists $HOME/infra/apps/app_billing/.env
+grep '^TOKEN=app-secret$' $HOME/infra/apps/app/.env
+! grep 'billing-secret' $HOME/infra/apps/app/.env
+! grep 'BILLING_TOKEN' $HOME/infra/apps/app/.env
+grep '^TOKEN=billing-secret$' $HOME/infra/apps/app_billing/.env
+! grep 'app-secret' $HOME/infra/apps/app_billing/.env
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: app
+    enabled: true
+    proxy:
+      inbound:
+        port: 9981
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+  - name: app_billing
+    enabled: true
+    proxy:
+      inbound:
+        port: 9982
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/app/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    environment:
+      TOKEN: ${TOKEN}
+    command: ["-listen=:80", "-text=APP"]
+
+-- git-repo/dev/app_billing/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    environment:
+      TOKEN: ${TOKEN}
+    command: ["-listen=:80", "-text=BILLING"]
+
+-- .env --
+APP__TOKEN=app-secret
+APP_BILLING__TOKEN=billing-secret

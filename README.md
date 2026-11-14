@@ -23,7 +23,7 @@ Scenarios live under `testdata/` and are grouped by theme:
 | `docker/` | Compose ports, `network_mode`, heal, enable/disable projects |
 | `nginx/` | Proxy conf write / rollback |
 | `certs/` | ACME issue, fallback, downgrade, retries, DNS preflight |
-| `env/` | Host `.env` prefix override + sidecar Java-style key normalization |
+| `env/` | Host `.env` `NAME__VAR` prefix override, nested-prefix isolation, sidecar key normalization |
 | `security/` | Credential hygiene: URL userinfo and registry token must not leak |
 
 Full inventory: [`E2E_SCENARIOS.md`](E2E_SCENARIOS.md).  

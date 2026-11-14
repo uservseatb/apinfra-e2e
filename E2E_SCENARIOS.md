@@ -81,11 +81,12 @@ Issue, fallback, downgrade, retries, DNS preflight, mock self-signed.
 
 ### `env/` — Host / project environment
 
-Host `.env` project-prefix injection and sidecar `.env` key normalization.
+Host `.env` project-prefix injection (`TO_UPPER(name)__`) and sidecar `.env` key normalization.
 
 | File | Covers |
 |------|--------|
-| `host_overrides_sidecar.txt` | `STOREFRONT_MARKER` on host overrides sidecar `MARKER` in `infra/apps/storefront/.env` |
+| `host_overrides_sidecar.txt` | `STOREFRONT__MARKER` on host overrides sidecar `MARKER` in `infra/apps/storefront/.env` |
+| `host_nested_prefix_isolation.txt` | `app` / `app_billing`: `APP__TOKEN` and `APP_BILLING__TOKEN` stay project-scoped (no `BILLING_TOKEN` leak into `app`) |
 | `sidecar_dot_normalize.txt` | Sidecar `web.image.tag` → `WEB_IMAGE_TAG` in applied project `.env` |
 
 ### `security/` — Credential hygiene in logs and host files
