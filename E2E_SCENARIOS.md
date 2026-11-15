@@ -35,6 +35,8 @@ Ports, `network_mode`, volumes/socket policy, healing, enabling/disabling projec
 | `apply_pending_retry.txt` | Compose change + failed login keeps same container on V1; fix host registry (no Git) → next cycle recreates container serving V2; fourth cycle stays on V2 |
 | `proxy_apply_pending_retry.txt` | Proxy inbound.port change + failed login keeps same `apinfra-proxy` cid and old port; `infra/.apply_pending` stays; fix host registry (no Git) → next cycle restarts proxy on new port and clears pending |
 | `network_mode_stripped.txt` | Any custom `network_mode` (`host`, `bridge`, …) stripped before start; written compose has none |
+| `network_mtu_default.txt` | Omitted `proxyNetworkMTU` / `projectNetworkMTU` → real bridge MTU `1350` on `apinfra_proxy_net` and `<project>_net` |
+| `network_mtu_override.txt` | `.apinfra` sets independent MTUs (`1400` / `1280`); `docker network inspect` matches; curl through proxy OK |
 | `heal_deleted_container.txt` | Two projects; `docker rm` one service in a 2-container stack → next cycle recreates it |
 | `heal_stopped_container.txt` | Two projects; `docker stop` one service in a 2-container stack → next cycle starts it again |
 | `project_disabled_downs.txt` | Two projects; `enabled: false` → `compose down` for that app; sibling stays running |
