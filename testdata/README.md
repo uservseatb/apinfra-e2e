@@ -158,7 +158,7 @@ Connect to your clean Linux server (Ubuntu) via SSH and execute the following co
 
 ```bash
 # 1. Download the latest package version
-curl -L -O https://github.com/uservseatb/apinfra/releases/download/v0.0.5/apinfra_0.0.5_amd64.deb
+curl -L -O https://github.com/uservseatb/apinfra/releases/download/v0.1.0/apinfra_0.1.0_amd64.deb
 
 # 2. Update package indexes and install
 sudo apt update
@@ -729,6 +729,16 @@ Optional keys in `/home/ap/.apinfra` for logging verbosity and operation timeout
 <td><code>useExecLogs</code></td>
 <td><code>false</code></td>
 <td>Optional. When <code>true</code>, detailed stdout and stderr of command invocations are written to the system journal (<code>journalctl</code>).</td>
+</tr>
+<tr>
+<td><code>proxyNetworkMTU</code></td>
+<td><code>1350</code></td>
+<td>Optional. Bridge MTU (<code>com.docker.network.driver.mtu</code>) for the shared <code>apinfra_proxy_net</code>. Allowed range <code>68</code>..<code>65535</code>. Docker does not resize an existing network, recreate it to apply a new value.</td>
+</tr>
+<tr bgcolor="#f6f8fa">
+<td><code>projectNetworkMTU</code></td>
+<td><code>1350</code></td>
+<td>Optional. Bridge MTU (<code>com.docker.network.driver.mtu</code>) for each managed <code>&lt;project&gt;_net</code>. Allowed range <code>68</code>..<code>65535</code>. Docker does not resize an existing network, recreate it to apply a new value.</td>
 </tr>
 </tbody>
 </table>
