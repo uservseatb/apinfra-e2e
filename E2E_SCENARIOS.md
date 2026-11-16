@@ -47,6 +47,11 @@ Ports, `network_mode`, volumes/socket policy, healing, enabling/disabling projec
 | `include_extends_blocked.txt` | Compose `include` / `extends` to host paths ignored; leaked service never starts |
 | `volume_policy_reject.txt` | Host bind + tmpfs → `security_violation` (`disallowed_bind_mount` / `disallowed_volume_type`); prior containers untouched |
 | `named_volume_ok.txt` | Named Docker volume allowed; written compose keeps `type: volume`; no security event |
+| `project_local_bind_ok.txt` | Relative `./file` + `./dir` binds (+ long-form `read_only: false` / short `:rw`) allowed; synced under `infra/apps/<project>/` as `0644`/`0755`; rewritten absolute + forced RO; named volume still OK |
+| `project_local_bind_reject.txt` | `./` root, `./.env`, `./docker-compose.yml`, missing Git source → `disallowed_bind_mount`; prior container untouched |
+| `project_local_bind_reject_traversal.txt` | `../` path traversal bind → `disallowed_bind_mount`; prior container untouched |
+| `project_local_bind_reject_symlink.txt` | Symlink file as bind source → `disallowed_bind_mount`; prior container untouched |
+| `project_local_bind_reject_symlink_dir.txt` | Dir bind containing symlink to in-project `.env` → `disallowed_bind_mount`; prior container untouched |
 | `docker_sock_untrusted.txt` | Sock bind rejected when allowlist missing, tag-only listed, or digest not listed → `untrusted_docker_socket_mount`; prior containers untouched |
 | `docker_sock_trusted.txt` | Digest in `~/.trusted_images` (case-insensitive, comments/blanks ok) + sock → deploy + `trusted_image_deployed` |
 

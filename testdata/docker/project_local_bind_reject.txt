@@ -1,0 +1,144 @@
+# Scenario: project-local bind policy rejects project root, metadata mounts
+# (.env / docker-compose.yml), and missing Git sources. Each bad cycle
+# soft-fails with security_violation / disallowed_bind_mount; prior healthy
+# container stays running. README Strict Volume & Socket Control.
+# Traversal / symlink cases live in sibling project_local_bind_reject_*.txt.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: baseline without forbidden binds'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+# --- Cycle 1: healthy stack ---
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-plrej-web
+
+cd git-repo
+cp ../compose.root.yml dev/e2e-plrej/docker-compose.yml
+exec git add .
+exec git commit -m 'fix: project root bind'
+cd ..
+
+# --- Cycle 2: ./ root rejected ---
+exec apinfra
+stderr 'security_violation'
+stderr 'disallowed_bind_mount'
+stderr 'volume policy violation'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+grep 'disallowed_bind_mount' $HOME/.events
+docker-assert-running apinfra_e2e-plrej-web
+
+cd git-repo
+cp ../compose.env.yml dev/e2e-plrej/docker-compose.yml
+exec git add .
+exec git commit -m 'fix: mount project .env'
+cd ..
+
+# --- Cycle 3: ./.env rejected ---
+exec apinfra
+stderr 'security_violation'
+stderr 'disallowed_bind_mount'
+stderr 'volume policy violation'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+docker-assert-running apinfra_e2e-plrej-web
+
+cd git-repo
+cp ../compose.compose-file.yml dev/e2e-plrej/docker-compose.yml
+exec git add .
+exec git commit -m 'fix: mount docker-compose.yml'
+cd ..
+
+# --- Cycle 4: ./docker-compose.yml rejected ---
+exec apinfra
+stderr 'security_violation'
+stderr 'disallowed_bind_mount'
+stderr 'volume policy violation'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+docker-assert-running apinfra_e2e-plrej-web
+
+cd git-repo
+cp ../compose.missing.yml dev/e2e-plrej/docker-compose.yml
+exec git add -A .
+exec git commit -m 'fix: bind missing Git source'
+cd ..
+
+# --- Cycle 5: missing source rejected before compose up ---
+exec apinfra
+stderr 'security_violation'
+stderr 'disallowed_bind_mount'
+stderr 'volume policy violation'
+stderr 'WARN cycle finished with errors'
+stderr 'done duration='
+docker-assert-running apinfra_e2e-plrej-web
+! exists $HOME/infra/apps/e2e-plrej/missing.yml
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-plrej
+    enabled: true
+    proxy:
+      inbound:
+        port: 9983
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-plrej/.env --
+SECRET=should-not-mount
+
+-- git-repo/dev/e2e-plrej/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
+
+-- compose.root.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
+    volumes:
+      - ./:/app:ro
+
+-- compose.env.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
+    volumes:
+      - ./.env:/app/.env:ro
+
+-- compose.compose-file.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
+    volumes:
+      - ./docker-compose.yml:/app/compose.yml:ro
+
+-- compose.missing.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
+    volumes:
+      - ./missing.yml:/etc/app/missing.yml:ro
+
+-- .env --
