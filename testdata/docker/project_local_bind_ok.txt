@@ -1,0 +1,92 @@
+# Scenario: project-local relative file/dir binds are allowed, synced from Git,
+# rewritten to absolute host paths under infra/apps/<project>/, and always
+# forced read-only (short :rw and long read_only: false overridden). Named
+# volumes stay writable. README Strict Volume & Socket Control.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: project-local bind fixtures'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'done duration='
+! stderr 'security_violation'
+! stderr 'disallowed_bind_mount'
+
+docker-assert-running apinfra_e2e-plbind-web
+
+exists $HOME/infra/apps/e2e-plbind/docker-compose.yml
+exists $HOME/infra/apps/e2e-plbind/config.txt
+exists $HOME/infra/apps/e2e-plbind/extra.txt
+exists $HOME/infra/apps/e2e-plbind/rules/a.txt
+grep 'hello-config' $HOME/infra/apps/e2e-plbind/config.txt
+grep 'rule-a' $HOME/infra/apps/e2e-plbind/rules/a.txt
+
+# Generated compose: absolute sources under apps/<project> + read_only on binds.
+grep 'read_only: true' $HOME/infra/apps/e2e-plbind/docker-compose.yml
+grep 'e2e-plbind/config.txt' $HOME/infra/apps/e2e-plbind/docker-compose.yml
+grep 'e2e-plbind/rules' $HOME/infra/apps/e2e-plbind/docker-compose.yml
+grep 'e2e-plbind/extra.txt' $HOME/infra/apps/e2e-plbind/docker-compose.yml
+grep 'type: volume' $HOME/infra/apps/e2e-plbind/docker-compose.yml
+grep 'source: data' $HOME/infra/apps/e2e-plbind/docker-compose.yml
+
+# Bind assets must be world-readable for non-root container UIDs.
+# Prefer GNU stat -c (Linux/CI); BSD -f %Lp is macOS-only (GNU -f means --file-system).
+exec sh -c 'if stat -c %a "$HOME/infra/apps/e2e-plbind/config.txt" >/dev/null 2>&1; then mode=$(stat -c %a "$HOME/infra/apps/e2e-plbind/config.txt"); else mode=$(stat -f %Lp "$HOME/infra/apps/e2e-plbind/config.txt"); fi; echo "config_mode=$mode"; test "$mode" = "644"'
+exec sh -c 'if stat -c %a "$HOME/infra/apps/e2e-plbind/rules" >/dev/null 2>&1; then mode=$(stat -c %a "$HOME/infra/apps/e2e-plbind/rules"); else mode=$(stat -f %Lp "$HOME/infra/apps/e2e-plbind/rules"); fi; echo "rules_mode=$mode"; test "$mode" = "755"'
+
+# Runtime mounts are read-only (RW=false), including sources that asked for :rw.
+exec sh -c 'cid=$(docker ps -q --filter name=apinfra_e2e-plbind-web); test -n "$cid"; docker inspect -f "{{range .Mounts}}{{println .Destination .RW}}{{end}}" "$cid" | tee mounts.txt; grep "/etc/app/config.txt false" mounts.txt; grep "/etc/app/rules false" mounts.txt; grep "/etc/app/extra.txt false" mounts.txt'
+
+! exists $HOME/.events
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-plbind
+    enabled: true
+    proxy:
+      inbound:
+        port: 9982
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-plbind/config.txt --
+hello-config
+
+-- git-repo/dev/e2e-plbind/extra.txt --
+hello-extra
+
+-- git-repo/dev/e2e-plbind/rules/a.txt --
+rule-a
+
+-- git-repo/dev/e2e-plbind/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
+    volumes:
+      - ./config.txt:/etc/app/config.txt
+      - ./rules:/etc/app/rules:rw
+      - type: bind
+        source: ./extra.txt
+        target: /etc/app/extra.txt
+        read_only: false
+      - data:/data
+volumes:
+  data:
+
+-- .env --
