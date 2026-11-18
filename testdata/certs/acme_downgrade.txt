@@ -1,4 +1,5 @@
-# Scenario: ACME rate-limit → .downgradeCertMode (prod → test), then next cycle issues test cert.
+# Scenario: ACME rate-limit → cert_rate_limited event + .downgradeCertMode (prod → test),
+# then next cycle issues test cert.
 #
 # Cycle 1: Let's Encrypt prod directory is the local 429 stub; no ZeroSSL secondary.
 # Cycle 2: point ACME at Pebble (ZeroSSL+EAB); effectiveMode=test from .downgradeCertMode.
@@ -19,11 +20,17 @@ exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
 chmod 0755 bin/dig
 env PATH=$WORK/bin:$PATH
 
-# --- Cycle 1: prod hits 429, schedule downgrade to test ---
+# --- Cycle 1: prod hits 429 → event + schedule downgrade to test ---
 exec apinfra
 stderr 'rate limited domain=e2e-downgrade.apinfra.test'
 stderr 'downgrade prod -> test'
 stderr 'done duration='
+
+exists $HOME/.events
+grep 'cert_rate_limited' $HOME/.events
+grep 'e2e-downgrade.apinfra.test' $HOME/.events
+grep '"from":"prod"' $HOME/.events
+grep '"to":"test"' $HOME/.events
 
 exists $HOME/.downgradeCertMode
 grep 'e2e-downgrade.apinfra.test' $HOME/.downgradeCertMode

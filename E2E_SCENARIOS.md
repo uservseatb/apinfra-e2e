@@ -37,8 +37,8 @@ Ports, `network_mode`, volumes/socket policy, healing, enabling/disabling projec
 | `network_mode_stripped.txt` | Any custom `network_mode` (`host`, `bridge`, …) stripped before start; written compose has none |
 | `network_mtu_default.txt` | Omitted `proxyNetworkMTU` / `projectNetworkMTU` → real bridge MTU `1350` on `apinfra_proxy_net` and `<project>_net` |
 | `network_mtu_override.txt` | `.apinfra` sets independent MTUs (`1400` / `1280`); `docker network inspect` matches; curl through proxy OK |
-| `heal_deleted_container.txt` | Two projects; `docker rm` one service in a 2-container stack → next cycle recreates it |
-| `heal_stopped_container.txt` | Two projects; `docker stop` one service in a 2-container stack → next cycle starts it again |
+| `heal_deleted_container.txt` | Two projects; `docker rm` one service → next cycle recreates it + `container_deployed` (`added=worker`) |
+| `heal_stopped_container.txt` | Two projects; `docker stop` one service → next cycle starts it again + `container_deployed` (`started=worker`) |
 | `project_disabled_downs.txt` | Two projects; `enabled: false` → `compose down` for that app; sibling stays running |
 | `worker_no_proxy.txt` | Project with no `proxy` still runs; no nginx conf; sibling with proxy keeps routing |
 | `container_name_target.txt` | `proxy.target.service-name` matches `container_name`; name stripped at runtime; nginx uses YAML service DNS |
@@ -46,14 +46,18 @@ Ports, `network_mode`, volumes/socket policy, healing, enabling/disabling projec
 | `no_new_privileges.txt` | `privileged: true` cleared; containers get `security_opt: no-new-privileges:true` |
 | `include_extends_blocked.txt` | Compose `include` / `extends` to host paths ignored; leaked service never starts |
 | `volume_policy_reject.txt` | Host bind + tmpfs → `security_violation` (`disallowed_bind_mount` / `disallowed_volume_type`); prior containers untouched |
-| `named_volume_ok.txt` | Named Docker volume allowed; written compose keeps `type: volume`; no security event |
-| `project_local_bind_ok.txt` | Relative `./file` + `./dir` binds (+ long-form `read_only: false` / short `:rw`) allowed; synced under `infra/apps/<project>/` as `0644`/`0755`; rewritten absolute + forced RO; named volume still OK |
+| `named_volume_ok.txt` | Named Docker volume allowed; written compose keeps `type: volume`; `container_deployed`, no `security_violation` |
+| `project_local_bind_ok.txt` | Relative `./file` + `./dir` binds (+ long-form `read_only: false` / short `:rw`) allowed; synced under `infra/apps/<project>/` as `0644`/`0755`; rewritten absolute + forced RO; named volume still OK; no `security_violation` |
 | `project_local_bind_reject.txt` | `./` root, `./.env`, `./docker-compose.yml`, missing Git source → `disallowed_bind_mount`; prior container untouched |
 | `project_local_bind_reject_traversal.txt` | `../` path traversal bind → `disallowed_bind_mount`; prior container untouched |
 | `project_local_bind_reject_symlink.txt` | Symlink file as bind source → `disallowed_bind_mount`; prior container untouched |
 | `project_local_bind_reject_symlink_dir.txt` | Dir bind containing symlink to in-project `.env` → `disallowed_bind_mount`; prior container untouched |
 | `docker_sock_untrusted.txt` | Sock bind rejected when allowlist missing, tag-only listed, or digest not listed → `untrusted_docker_socket_mount`; prior containers untouched |
 | `docker_sock_trusted.txt` | Digest in `~/.trusted_images` (case-insensitive, comments/blanks ok) + sock → deploy + `trusted_image_deployed` |
+| `container_deployed.txt` | Successful app pull/up → `container_deployed` (`project`, `containers=api,web`, `added=api,web`; empty `removed`/`started` omitted); idempotent second cycle leaves `.events` unchanged |
+| `container_deployed_diff.txt` | Compose change with stopped desired + new service + orphan → `container_deployed` (`containers=db,web`, `added=db`, `removed=worker`, `started=web`) |
+| `container_deploy_failed.txt` | Compose change to missing image tag → `container_deploy_failed` (`project`, `containers`, `error`; empty diff fields omitted); `.apply_pending` kept; prior container still serves V1 |
+| `container_removed.txt` | `enabled: false` → successful `compose down` + apps dir removed → `container_removed` (`project`, host-observed `containers`); sibling stays up |
 
 ### `nginx/` — Nginx config
 
@@ -76,11 +80,11 @@ Issue, fallback, downgrade, retries, DNS preflight, mock self-signed.
 | File | Covers |
 |------|--------|
 | `acme_cert_happy_path.txt` | Pebble/EAB issue in prod; PEMs under `certbot/conf/live/`; `.certs.json` has `active_mode` + `certs.prod` PEM cache + accounts |
-| `acme_downgrade.txt` | Rate-limit → `.downgradeCertMode` prod→test; next cycle issues test |
+| `acme_downgrade.txt` | Rate-limit → `cert_rate_limited` (`domain`, `from=prod`, `to=test`) + `.downgradeCertMode` prod→test; next cycle issues test |
 | `acme_le_zerossl_fallback.txt` | LE 429 → ZeroSSL (Pebble) secondary keeps prod (no downgrade) |
 | `cert_issue_failed.txt` | Non–rate-limit ACME fail → `.retries` block + `cert_issue_failed`; next cycle skips CA |
-| `dns_preflight_skip.txt` | Empty `dig +short` skips ACME for the cycle (no retry / downgrade / `.certs.json`) |
-| `dns_preflight_public_ip.txt` | Configured `certs.publicIP` matches or mismatches dig IP -> pass or skip cycle |
+| `dns_preflight_skip.txt` | Empty `dig +short` skips ACME for the cycle (no retry / downgrade / `.certs.json` / cert events; `container_deployed` ok) |
+| `dns_preflight_public_ip.txt` | Configured `certs.publicIP` matches or mismatches dig IP -> pass or skip cycle (mismatch: no cert events) |
 | `mock_domain_cert.txt` | Domain + `mock` → local PEMs under `mockcerts/<domain>/` (no ACME); nginx HTTPS |
 | `prod_mode_switch_retains.txt` | Intentional `prod → test → prod`: staging on disk mid-step; prod restored from `.certs.json` without second obtain |
 | `certs_json_cold_restore.txt` | Delete `live/` PEMs; next cycle materializes from `.certs.json` without ACME obtain |

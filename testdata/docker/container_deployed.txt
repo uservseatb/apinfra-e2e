@@ -1,0 +1,69 @@
+# Scenario: successful app compose pull/up writes container_deployed with
+# project + sorted desired service keys (containers) and added (all new).
+# Empty removed/started are omitted from JSON. Unchanged/running stacks on a
+# later cycle do not emit again (README Events).
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: container deployed baseline'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+# --- Cycle 1: first deploy emits container_deployed with added ---
+exec apinfra
+stderr 'container deployed project=e2e-cdepok containers=api,web added=api,web removed=\(none\) started=\(none\)'
+stderr 'done duration='
+
+docker-assert-running apinfra_e2e-cdepok-web
+docker-assert-running apinfra_e2e-cdepok-api
+exists $HOME/.events
+grep 'container_deployed' $HOME/.events
+grep '"project":"e2e-cdepok"' $HOME/.events
+grep '"containers":"api,web"' $HOME/.events
+grep '"added":"api,web"' $HOME/.events
+! grep '"removed"' $HOME/.events
+! grep '"started"' $HOME/.events
+
+exec sh -c 'cp "$HOME/.events" "$WORK/events.after-first"'
+
+# --- Cycle 2: healthy idempotent run must not append another deploy event ---
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-cdepok-web
+docker-assert-running apinfra_e2e-cdepok-api
+
+exec sh -c 'cmp -s "$HOME/.events" "$WORK/events.after-first"'
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-cdepok
+    enabled: true
+    proxy:
+      inbound:
+        port: 9963
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-cdepok/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
+  api:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=API"]
+
+-- .env --

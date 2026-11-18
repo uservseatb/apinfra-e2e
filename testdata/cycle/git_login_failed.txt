@@ -17,7 +17,9 @@ exec apinfra
 stderr 'done duration='
 docker-assert-running apinfra_e2e-web-web
 exists $HOME/infra/nginx/conf/dev_e2e-web.conf
-! exists $HOME/.events
+exists $HOME/.events
+grep 'container_deployed' $HOME/.events
+! grep 'git_login_failed' $HOME/.events
 
 git-authfail-start
 

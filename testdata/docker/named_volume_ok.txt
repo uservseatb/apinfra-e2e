@@ -21,7 +21,10 @@ exists $HOME/infra/apps/e2e-volnamed/docker-compose.yml
 grep 'type: volume' $HOME/infra/apps/e2e-volnamed/docker-compose.yml
 grep 'source: data' $HOME/infra/apps/e2e-volnamed/docker-compose.yml
 grep 'target: /data' $HOME/infra/apps/e2e-volnamed/docker-compose.yml
-! exists $HOME/.events
+# Successful deploy writes container_deployed; named volume must not emit security_violation.
+exists $HOME/.events
+grep 'container_deployed' $HOME/.events
+! grep 'security_violation' $HOME/.events
 
 -- .apinfra.template --
 namespace=dev

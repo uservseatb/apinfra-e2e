@@ -1,5 +1,6 @@
-# Scenario: docker rm of one service in a multi-container stack → next cycle recreates it.
-# Two projects; mutate only worker in e2e-stack (web+worker). Sibling project stays up.
+# Scenario: docker rm of one service in a multi-container stack → next cycle
+# recreates it and emits container_deployed with added=<service>
+# (README Events). Two projects; mutate only worker in e2e-stack. Sibling stays up.
 
 cd git-repo
 exec git init -b main
@@ -19,6 +20,8 @@ docker-assert-running apinfra_e2e-stack-web
 docker-assert-running apinfra_e2e-stack-worker
 docker-assert-running apinfra_e2e-other-web
 
+exec sh -c 'cp "$HOME/.events" "$WORK/events.after-first"'
+
 # Remove only worker from the multi-service stack.
 exec sh -c 'cid=$(docker ps -aq --filter name=apinfra_e2e-stack-worker); test -n "$cid" && docker rm -f $cid'
 ! docker-assert-running apinfra_e2e-stack-worker
@@ -26,12 +29,22 @@ docker-assert-running apinfra_e2e-stack-web
 docker-assert-running apinfra_e2e-other-web
 
 exec apinfra
+stderr 'container deployed project=e2e-stack containers=web,worker added=worker removed=\(none\) started=\(none\)'
 stderr 'done duration='
 
 # Worker restored; rest of fleet untouched.
 docker-assert-running apinfra_e2e-stack-worker
 docker-assert-running apinfra_e2e-stack-web
 docker-assert-running apinfra_e2e-other-web
+
+exists $HOME/.events
+exec sh -c 'grep container_deployed "$HOME/.events" | tail -n1 > "$WORK/heal.event"'
+grep '"project":"e2e-stack"' $WORK/heal.event
+grep '"containers":"web,worker"' $WORK/heal.event
+grep '"added":"worker"' $WORK/heal.event
+! grep '"removed"' $WORK/heal.event
+! grep '"started"' $WORK/heal.event
+exec sh -c '! cmp -s "$HOME/.events" "$WORK/events.after-first"'
 
 -- .apinfra.template --
 namespace=dev

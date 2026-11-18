@@ -1,0 +1,88 @@
+# Scenario: compose change with a stopped desired service, a new service, and
+# an orphan → container_deployed lists containers + added + removed + started
+# from the pre-up ContainerList (README Events).
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: container deployed diff baseline'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+# --- Cycle 1: web + worker ---
+exec apinfra
+stderr 'container deployed project=e2e-cdepdiff containers=web,worker added=web,worker removed=\(none\) started=\(none\)'
+stderr 'done duration='
+
+docker-assert-running apinfra_e2e-cdepdiff-web
+docker-assert-running apinfra_e2e-cdepdiff-worker
+
+# Stop web (present but not running → started); leave worker up (orphan after compose change).
+exec sh -c 'cid=$(docker ps -q --filter name=apinfra_e2e-cdepdiff-web); test -n "$cid" && docker stop $cid'
+! docker-assert-running apinfra_e2e-cdepdiff-web
+docker-assert-running apinfra_e2e-cdepdiff-worker
+
+cd git-repo
+cp ../compose.web-db.yml dev/e2e-cdepdiff/docker-compose.yml
+exec git add .
+exec git commit -m 'feat: replace worker with db'
+cd ..
+
+# --- Cycle 2: desired db+web; host has exited web + running worker ---
+exec apinfra
+stderr 'container deployed project=e2e-cdepdiff containers=db,web added=db removed=worker started=web'
+stderr 'done duration='
+
+docker-assert-running apinfra_e2e-cdepdiff-web
+docker-assert-running apinfra_e2e-cdepdiff-db
+! docker-assert-running apinfra_e2e-cdepdiff-worker
+
+exists $HOME/.events
+exec sh -c 'grep container_deployed "$HOME/.events" | tail -n1 > "$WORK/diff.event"'
+grep '"project":"e2e-cdepdiff"' $WORK/diff.event
+grep '"containers":"db,web"' $WORK/diff.event
+grep '"added":"db"' $WORK/diff.event
+grep '"removed":"worker"' $WORK/diff.event
+grep '"started":"web"' $WORK/diff.event
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-cdepdiff
+    enabled: true
+    proxy:
+      inbound:
+        port: 9967
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-cdepdiff/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=DIFF_V1"]
+  worker:
+    image: alpine:latest
+    command: sh -c "while true; do sleep 3600; done"
+
+-- compose.web-db.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=DIFF_V2"]
+  db:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=DB"]
+
+-- .env --

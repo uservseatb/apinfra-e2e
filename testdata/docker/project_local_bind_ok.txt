@@ -44,7 +44,10 @@ exec sh -c 'if stat -c %a "$HOME/infra/apps/e2e-plbind/rules" >/dev/null 2>&1; t
 # Runtime mounts are read-only (RW=false), including sources that asked for :rw.
 exec sh -c 'cid=$(docker ps -q --filter name=apinfra_e2e-plbind-web); test -n "$cid"; docker inspect -f "{{range .Mounts}}{{println .Destination .RW}}{{end}}" "$cid" | tee mounts.txt; grep "/etc/app/config.txt false" mounts.txt; grep "/etc/app/rules false" mounts.txt; grep "/etc/app/extra.txt false" mounts.txt'
 
-! exists $HOME/.events
+# Successful deploy writes container_deployed; allowed binds must not emit security_violation.
+exists $HOME/.events
+grep 'container_deployed' $HOME/.events
+! grep 'security_violation' $HOME/.events
 
 -- .apinfra.template --
 namespace=dev

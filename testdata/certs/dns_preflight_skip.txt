@@ -28,7 +28,11 @@ stderr 'done duration='
 ! exists $HOME/.retries
 ! exists $HOME/.downgradeCertMode
 ! exists $HOME/.certs.json
-! exists $HOME/.events
+# App deploy may write container_deployed; DNS skip itself must not emit cert events.
+exists $HOME/.events
+grep 'container_deployed' $HOME/.events
+! grep 'cert_issue_failed' $HOME/.events
+! grep 'cert_rate_limited' $HOME/.events
 docker-assert-running apinfra_e2e-web-web-1
 
 -- .apinfra.template --
