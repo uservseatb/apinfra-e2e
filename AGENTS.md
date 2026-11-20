@@ -76,6 +76,7 @@ Scenarios live in **theme subdirectories** — exactly one level: `testdata/<the
 | `certs/` | `e2e/certs_test.go` | `TestE2eCerts` | Certificate issuance: ACME, fallback, downgrade, retries, DNS preflight |
 | `env/` | `e2e/env_test.go` | `TestE2eEnv` | Host `.env` `NAME__VAR` prefix override, nested-prefix isolation, sidecar key normalization |
 | `security/` | `e2e/security_test.go` | `TestE2eSecurity` | Credential hygiene: URL userinfo and registry token must not leak into logs/events/files |
+| `notifications/` | `e2e/notifications_test.go` | `TestE2eNotifications` | Outbound Shoutrrr push: webhook delivery, filter, EOF anchor, send-fail retry, alert title |
 
 When adding a scenario, place it under the matching theme. If none fit and the new area is substantial, introduce a new top-level theme, add `e2e/<theme>_test.go` with `TestE2e<Theme>`, and document it here and in `E2E_SCENARIOS.md` in the same change.
 
@@ -118,6 +119,8 @@ Each `testdata/<theme>/<name>.txt` is a testscript archive:
    - `pebble-start` / `pebble-stop`
    - `acme-ratelimit-start` / `acme-ratelimit-stop`
    - `git-authfail-start` / `git-authfail-stop` (HTTP 401 stub on `127.0.0.1:18081`)
+   - `notify-hook-start` / `notify-hook-stop` (generic+http stub on `127.0.0.1:18100/hook`; successful bodies → `$WORK/notify-hook.bodies`)
+   - `notify-hook-fail` / `notify-hook-ok` (toggle stub to HTTP 500 / 200; only 2xx appends bodies)
 5. Embed host + Git fixtures after `-- path --` markers (txtar). Override `.apinfra` / `.env` in the archive when postinst defaults are wrong — Setup installs examples only if missing.
 
 ### Conventions
@@ -126,7 +129,7 @@ Each `testdata/<theme>/<name>.txt` is a testscript archive:
 - Prefer **environment stubs** over Go mocks: local `file://` Git, fake `bin/dig` on `PATH`, Pebble, ACME 429 stub.
 - Keep scenarios focused (one behavior). Reuse the `hashicorp/http-echo` stub pattern from existing files (`command: ["-listen=:80", "-text=…"]`).
 - ACME domain scenarios need DNS preflight: ship a tiny `bin/dig` stub and `chmod 0755` + prepend `PATH`.
-- Always stop Pebble / rate-limit / git-authfail servers started in the script (`pebble-stop`, `acme-ratelimit-stop`, `git-authfail-stop`).
+- Always stop Pebble / rate-limit / git-authfail / notify-hook servers started in the script (`pebble-stop`, `acme-ratelimit-stop`, `git-authfail-stop`, `notify-hook-stop`).
 - Match product behavior from `testdata/README.md` (validation soft-fail, cert rollback, port strip/rewrite, events). Do not assert implementation details that the product README does not promise — **except** intentional omissions listed above (e.g. `container_name_target`).
 - Change only what the task needs; no drive-by refactors of `env/` unless required by the new scenario.
 - In `stderr` / `stdout` patterns, avoid unescaped regex metacharacters (especially `(` `)` `.`) unless intentional — testscript matches as regexp.

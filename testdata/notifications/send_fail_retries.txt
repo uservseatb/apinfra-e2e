@@ -1,0 +1,93 @@
+# Scenario: webhook HTTP 500 does not abort the cycle; offset stays put so the
+# next successful cycle delivers the deferred git_login_failed (README:
+# delivery failures are warnings; cursor advances only after successful send).
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: notify send-fail baseline'
+cd ..
+
+notify-hook-start
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+# --- Cycle 1: healthy deploy anchors notify cursor at EOF ---
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-nfail-web
+
+git-authfail-start
+cp .apinfra.authfail .apinfra
+notify-hook-fail
+
+# --- Cycle 2: auth fail + hook 500 → event written, send WARN, no delivery ---
+exec apinfra
+stderr 'git authentication failed'
+stderr '\[notify\] WARN send'
+stderr 'done duration='
+
+exists $HOME/.events
+grep 'git_login_failed' $HOME/.events
+exists $WORK/notify-hook.bodies
+exec sh -c 'test ! -s "$WORK/notify-hook.bodies"'
+
+notify-hook-ok
+
+# --- Cycle 3: sticky fail + hook OK → deferred (and new) event delivered ---
+exec apinfra
+stderr 'git authentication failed'
+stderr 'done duration='
+
+grep 'git_login_failed' $WORK/notify-hook.bodies
+grep 'type: git_login_failed' $WORK/notify-hook.bodies
+
+git-authfail-stop
+notify-hook-stop
+
+-- .apinfra.template --
+namespace=dev
+serverName=e2e-host
+repoBranch=main
+notifications.enabled=true
+notifications.targets=generic+http://127.0.0.1:18100/hook
+notifications.events=git_login_failed
+notifications.maxPerCycle=10
+notifications.cutEvery=100
+
+-- .apinfra.authfail --
+namespace=dev
+serverName=e2e-host
+repoBranch=main
+repo=http://127.0.0.1:18081/repo
+repoToken=bad-token
+notifications.enabled=true
+notifications.targets=generic+http://127.0.0.1:18100/hook
+notifications.events=git_login_failed
+notifications.maxPerCycle=10
+notifications.cutEvery=100
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-nfail
+    enabled: true
+    proxy:
+      inbound:
+        port: 9811
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-nfail/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=NOTIFY_FAIL"]
+
+-- .env --

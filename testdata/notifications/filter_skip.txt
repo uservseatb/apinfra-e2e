@@ -1,0 +1,86 @@
+# Scenario: notifications.events filter advances past non-matching lines without
+# sending; only git_login_failed is delivered (container_deployed stays local).
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: notify filter baseline'
+cd ..
+
+notify-hook-start
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+# --- Cycle 1: deploy emits container_deployed; filter skips → empty hook ---
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-nfilt-web
+
+exists $HOME/.events
+grep 'container_deployed' $HOME/.events
+exists $WORK/notify-hook.bodies
+exec sh -c 'test ! -s "$WORK/notify-hook.bodies"'
+
+git-authfail-start
+cp .apinfra.authfail .apinfra
+
+# --- Cycle 2: matching git_login_failed is delivered ---
+exec apinfra
+stderr 'git authentication failed'
+stderr 'done duration='
+
+grep 'git_login_failed' $HOME/.events
+grep 'git_login_failed' $WORK/notify-hook.bodies
+grep 'type: git_login_failed' $WORK/notify-hook.bodies
+! grep 'container_deployed' $WORK/notify-hook.bodies
+! grep 'type: container_deployed' $WORK/notify-hook.bodies
+
+git-authfail-stop
+notify-hook-stop
+
+-- .apinfra.template --
+namespace=dev
+serverName=e2e-host
+repoBranch=main
+notifications.enabled=true
+notifications.targets=generic+http://127.0.0.1:18100/hook
+notifications.events=git_login_failed
+notifications.maxPerCycle=10
+notifications.cutEvery=100
+
+-- .apinfra.authfail --
+namespace=dev
+serverName=e2e-host
+repoBranch=main
+repo=http://127.0.0.1:18081/repo
+repoToken=bad-token
+notifications.enabled=true
+notifications.targets=generic+http://127.0.0.1:18100/hook
+notifications.events=git_login_failed
+notifications.maxPerCycle=10
+notifications.cutEvery=100
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-nfilt
+    enabled: true
+    proxy:
+      inbound:
+        port: 9812
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-nfilt/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=NOTIFY_FILTER"]
+
+-- .env --

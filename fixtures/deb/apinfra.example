@@ -1,5 +1,11 @@
 namespace=dev
 
+# Optional host identity.
+# Alert title: serverName → hostPublicIP → OS hostname.
+# DNS preflight (prod/test ACME): when hostPublicIP is set, dig must return it.
+#serverName=dev-1
+#hostPublicIP=203.0.113.10
+
 # Config repository (HTTPS). Leave repoToken empty for public repos.
 repo=https://github.com/uservseatb/apinfra-demo-conf.git
 repoToken=
@@ -13,9 +19,6 @@ containerRegistryToken=
 # ACME certificate authority: letsencrypt (default) or zerossl.
 certs.provider=letsencrypt
 
-# Optional: if set, DNS preflight (dig +short) requires this IP among answers.
-# If unset, any IP from dig +short is enough.
-#certs.publicIP=203.0.113.10
 
 # Non–rate-limit failures: attempts before block, and block length in hours.
 certs.triesCount=3

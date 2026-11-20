@@ -21,6 +21,17 @@ First deploy, idempotent re-run, validation soft-fail / leave prior state alone.
 | `validation_rollback.txt` | Invalid `settings.yml` soft-fails; prior containers untouched |
 | `git_login_failed.txt` | Config-repo clone HTTP 401 → `git_login_failed`; cycle aborted; prior Docker/Nginx untouched |
 
+### `notifications/` — Outbound push (Shoutrrr)
+
+| File | Covers |
+|------|--------|
+| `outbound_webhook.txt` | `notifications.*` + `generic+http` mock hook; `git_login_failed` delivered after cycle; second sticky-failure cycle delivers again |
+| `send_fail_retries.txt` | Hook HTTP 500 → cycle still `done`; event kept; offset not advanced; next OK cycle delivers deferred `git_login_failed` |
+| `filter_skip.txt` | `notifications.events=git_login_failed` skips `container_deployed` (empty hook); matching auth-fail is delivered |
+| `no_historical_replay.txt` | Pre-seeded `~/.events` not replayed on first enable (EOF anchor); later new `git_login_failed` delivered |
+| `hostpublicip_title.txt` | No `serverName` → alert title `hostPublicIP[namespace]` (`203.0.113.10[dev]`) |
+| `events_all_deployed.txt` | Omitted `notifications.events` (default all) → first deploy pushes `container_deployed` |
+
 ### `docker/` — Docker / Compose apply
 
 Ports, `network_mode`, volumes/socket policy, healing, enabling/disabling projects.
@@ -84,7 +95,7 @@ Issue, fallback, downgrade, retries, DNS preflight, mock self-signed.
 | `acme_le_zerossl_fallback.txt` | LE 429 → ZeroSSL (Pebble) secondary keeps prod (no downgrade) |
 | `cert_issue_failed.txt` | Non–rate-limit ACME fail → `.retries` block + `cert_issue_failed`; next cycle skips CA |
 | `dns_preflight_skip.txt` | Empty `dig +short` skips ACME for the cycle (no retry / downgrade / `.certs.json` / cert events; `container_deployed` ok) |
-| `dns_preflight_public_ip.txt` | Configured `certs.publicIP` matches or mismatches dig IP -> pass or skip cycle (mismatch: no cert events) |
+| `dns_preflight_public_ip.txt` | Configured `hostPublicIP` matches or mismatches dig IP -> pass or skip cycle (mismatch: no cert events) |
 | `mock_domain_cert.txt` | Domain + `mock` → local PEMs under `mockcerts/<domain>/` (no ACME); nginx HTTPS |
 | `prod_mode_switch_retains.txt` | Intentional `prod → test → prod`: staging on disk mid-step; prod restored from `.certs.json` without second obtain |
 | `certs_json_cold_restore.txt` | Delete `live/` PEMs; next cycle materializes from `.certs.json` without ACME obtain |

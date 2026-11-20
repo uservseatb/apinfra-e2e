@@ -120,6 +120,10 @@ var commands = map[string]func(*testscript.TestScript, bool, []string){
 	pebbleStopCmd:             pebbleStopCmdFn,
 	gitAuthFailStartCmd:       gitAuthFailStartCmdFn,
 	gitAuthFailStopCmd:        gitAuthFailStopCmdFn,
+	notifyHookStartCmd:        notifyHookStartCmdFn,
+	notifyHookStopCmd:         notifyHookStopCmdFn,
+	notifyHookFailCmd:         notifyHookFailCmdFn,
+	notifyHookOKCmd:           notifyHookOKCmdFn,
 }
 
 func propagateEnv(env *testscript.Env, keys ...string) {

@@ -1,0 +1,89 @@
+# Scenario: first enable anchors the notify cursor at EOF so pre-existing
+# ~/.events lines are not replayed; a later new git_login_failed is delivered.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: notify no-replay baseline'
+cd ..
+
+# Seed historical event before notifications ever run.
+exec sh -c 'printf "%s\n" "{\"ts\":\"2020-01-01T00:00:00Z\",\"type\":\"git_login_failed\",\"repo\":\"historical-old-repo\"}" > "$HOME/.events"'
+exists $HOME/.events
+grep 'historical-old-repo' $HOME/.events
+
+notify-hook-start
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+# --- Cycle 1: enable + healthy deploy; historical line must not be pushed ---
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-nhist-web
+
+exists $HOME/.events.notify.state.json
+exists $WORK/notify-hook.bodies
+exec sh -c 'test ! -s "$WORK/notify-hook.bodies"'
+! grep 'historical-old-repo' $WORK/notify-hook.bodies
+
+git-authfail-start
+cp .apinfra.authfail .apinfra
+
+# --- Cycle 2: new auth-fail event is delivered; historical stays unsent ---
+exec apinfra
+stderr 'git authentication failed'
+stderr 'done duration='
+
+grep 'git_login_failed' $WORK/notify-hook.bodies
+grep 'type: git_login_failed' $WORK/notify-hook.bodies
+! grep 'historical-old-repo' $WORK/notify-hook.bodies
+
+git-authfail-stop
+notify-hook-stop
+
+-- .apinfra.template --
+namespace=dev
+serverName=e2e-host
+repoBranch=main
+notifications.enabled=true
+notifications.targets=generic+http://127.0.0.1:18100/hook
+notifications.events=git_login_failed
+notifications.maxPerCycle=10
+notifications.cutEvery=100
+
+-- .apinfra.authfail --
+namespace=dev
+serverName=e2e-host
+repoBranch=main
+repo=http://127.0.0.1:18081/repo
+repoToken=bad-token
+notifications.enabled=true
+notifications.targets=generic+http://127.0.0.1:18100/hook
+notifications.events=git_login_failed
+notifications.maxPerCycle=10
+notifications.cutEvery=100
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-nhist
+    enabled: true
+    proxy:
+      inbound:
+        port: 9813
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-nhist/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=NOTIFY_HIST"]
+
+-- .env --

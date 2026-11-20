@@ -1,0 +1,61 @@
+# Scenario: omitted notifications.events (default all types) delivers
+# container_deployed on first successful deploy via generic+http webhook.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: notify events=all deploy baseline'
+cd ..
+
+notify-hook-start
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+# --- Cycle 1: first deploy → container_deployed pushed outbound ---
+exec apinfra
+stderr 'done duration='
+docker-assert-running apinfra_e2e-nall-web
+
+exists $HOME/.events
+grep 'container_deployed' $HOME/.events
+exists $WORK/notify-hook.bodies
+grep 'container_deployed' $WORK/notify-hook.bodies
+grep 'type: container_deployed' $WORK/notify-hook.bodies
+grep 'e2e-host\[dev\]' $WORK/notify-hook.bodies
+grep 'project: e2e-nall' $WORK/notify-hook.bodies
+
+notify-hook-stop
+
+-- .apinfra.template --
+namespace=dev
+serverName=e2e-host
+repoBranch=main
+notifications.enabled=true
+notifications.targets=generic+http://127.0.0.1:18100/hook
+notifications.maxPerCycle=10
+notifications.cutEvery=100
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-nall
+    enabled: true
+    proxy:
+      inbound:
+        port: 9815
+      target:
+        service-name: web
+        port: 80
+    config:
+      cert-issue-type: none
+
+-- git-repo/dev/e2e-nall/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=NOTIFY_ALL"]
+
+-- .env --

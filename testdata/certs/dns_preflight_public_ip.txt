@@ -1,8 +1,8 @@
-# Scenario: DNS preflight with certs.publicIP
-# If certs.publicIP is set, that IP must appear among dig's results.
-# - If there is a mismatch (dig returns 127.0.0.1, certs.publicIP is 1.2.3.4):
+# Scenario: DNS preflight with hostPublicIP
+# If hostPublicIP is set, that IP must appear among dig's results.
+# - If there is a mismatch (dig returns 127.0.0.1, hostPublicIP is 1.2.3.4):
 #   Preflight fails, skipping certificate issuance (no retry, no downgrade).
-# - If there is a match (dig returns 127.0.0.1, certs.publicIP is 127.0.0.1):
+# - If there is a match (dig returns 127.0.0.1, hostPublicIP is 127.0.0.1):
 #   Preflight succeeds and certificate is successfully issued via Pebble.
 
 pebble-start
@@ -19,7 +19,7 @@ cd ..
 # Step 2: Configure with MISMATCHING publicIP (e.g., 1.2.3.4)
 cp .apinfra.template .apinfra
 exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
-exec sh -c 'echo "certs.publicIP=1.2.3.4" >> .apinfra'
+exec sh -c 'echo "hostPublicIP=1.2.3.4" >> .apinfra'
 
 chmod 0755 bin/dig
 env PATH=$WORK/bin:$PATH
@@ -41,7 +41,7 @@ docker-assert-running apinfra_e2e-web-web-1
 # Step 3: Configure with MATCHING publicIP (127.0.0.1)
 cp .apinfra.template .apinfra
 exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
-exec sh -c 'echo "certs.publicIP=127.0.0.1" >> .apinfra'
+exec sh -c 'echo "hostPublicIP=127.0.0.1" >> .apinfra'
 
 # Run agent - should succeed and issue certificate
 exec apinfra

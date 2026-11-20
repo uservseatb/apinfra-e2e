@@ -1,7 +1,7 @@
 # Scenario: working prod domain stays live when settings switch to a new domain
 # whose ACME fails (non-429) → .retries block + nginx conf rolled back.
 #
-# Mirrors: dig returns some IP (registrar parking) with no certs.publicIP, so
+# Mirrors: dig returns some IP (registrar parking) with no hostPublicIP, so
 # DNS preflight passes; ACME challenge/CA then fails → block, not skip.
 # Cycle 1 issues prod for domain A (Pebble); cycle 2 points ACME at a dead
 # directory and changes domain-name to B.
@@ -38,7 +38,7 @@ exec curl -skf --resolve e2e-keep.apinfra.test:443:127.0.0.1 https://e2e-keep.ap
 
 pebble-stop
 
-# Dig now returns a non-local "parking" IP; no certs.publicIP → preflight still OK.
+# Dig now returns a non-local "parking" IP; no hostPublicIP → preflight still OK.
 cp bin/dig.parking bin/dig
 chmod 0755 bin/dig
 
