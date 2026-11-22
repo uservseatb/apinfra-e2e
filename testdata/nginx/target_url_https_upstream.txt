@@ -1,0 +1,82 @@
+# Scenario: domain + proxy.target.url https upstream → mock TLS for the public
+# hostname; nginx proxy_pass with proxy_ssl_server_name and Host from URL host.
+# Upstream host is a sibling DNS name on apinfra_proxy_net (resolvable for nginx -t);
+# live curl checks public TLS + :80→:443 redirect (upstream may 502 — http-echo is HTTP).
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: url https upstream with mock cert'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'skip compose project=e2e-edge \(url-only target\)'
+stderr 'cert issued name=e2e-edge\.apinfra\.test mode=mock'
+stderr 'done duration='
+! stderr 'WARN cycle finished with errors'
+
+docker-assert-running apinfra-proxy
+docker-assert-running apinfra_e2e-origin-web
+! exists $HOME/infra/apps/e2e-edge
+
+exists $HOME/infra/mockcerts/e2e-edge.apinfra.test/fullchain.pem
+exists $HOME/infra/mockcerts/e2e-edge.apinfra.test/privkey.pem
+
+exists $HOME/infra/nginx/conf/dev_e2e-edge.conf
+grep 'server_name e2e-edge\.apinfra\.test' $HOME/infra/nginx/conf/dev_e2e-edge.conf
+grep 'listen 80;' $HOME/infra/nginx/conf/dev_e2e-edge.conf
+grep 'return 301 https://e2e-edge\.apinfra\.test\$request_uri;' $HOME/infra/nginx/conf/dev_e2e-edge.conf
+grep 'listen 443 ssl' $HOME/infra/nginx/conf/dev_e2e-edge.conf
+grep '/etc/nginx/mockcerts/e2e-edge\.apinfra\.test/fullchain\.pem' $HOME/infra/nginx/conf/dev_e2e-edge.conf
+grep 'proxy_pass "https://web\.apinfra_e2e-origin"' $HOME/infra/nginx/conf/dev_e2e-edge.conf
+grep 'proxy_ssl_server_name on' $HOME/infra/nginx/conf/dev_e2e-edge.conf
+grep 'proxy_set_header Host web\.apinfra_e2e-origin;' $HOME/infra/nginx/conf/dev_e2e-edge.conf
+! grep 'proxy_set_header Host \$host;' $HOME/infra/nginx/conf/dev_e2e-edge.conf
+! grep 'apinfra_e2e-edge' $HOME/infra/nginx/conf/dev_e2e-edge.conf
+
+# Smoke: conf reloaded (TLS handshake + redirect work). Upstream is https→http-echo → 502.
+exec curl -sk --resolve e2e-edge.apinfra.test:443:127.0.0.1 -o /dev/null -w '%{http_code}' https://e2e-edge.apinfra.test/
+stdout '502'
+exec curl -s --resolve e2e-edge.apinfra.test:80:127.0.0.1 -o /dev/null -w '%{http_code}' http://e2e-edge.apinfra.test/
+stdout '301'
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-origin
+    enabled: true
+    proxy:
+      inbound:
+        port: 19993
+      target:
+        service:
+          name: web
+          port: 80
+    config:
+      cert-issue-type: none
+  - name: e2e-edge
+    enabled: true
+    proxy:
+      inbound:
+        domain-name: e2e-edge.apinfra.test
+      target:
+        url: https://web.apinfra_e2e-origin
+    config:
+      cert-issue-type: mock
+
+-- git-repo/dev/e2e-origin/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=ORIGIN_OK"]
+
+-- .env --

@@ -77,8 +77,9 @@ projects:
       inbound:
         port: 9810
       target:
-        service-name: web
-        port: 80
+        service:
+          name: web
+          port: 80
     config:
       cert-issue-type: none
 

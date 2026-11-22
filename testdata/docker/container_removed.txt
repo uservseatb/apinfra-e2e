@@ -63,8 +63,9 @@ projects:
       inbound:
         port: 9965
       target:
-        service-name: web
-        port: 80
+        service:
+          name: web
+          port: 80
     config:
       cert-issue-type: none
   - name: e2e-crem-drop
@@ -73,8 +74,9 @@ projects:
       inbound:
         port: 9966
       target:
-        service-name: web
-        port: 80
+        service:
+          name: web
+          port: 80
     config:
       cert-issue-type: none
 
@@ -87,8 +89,9 @@ projects:
       inbound:
         port: 9965
       target:
-        service-name: web
-        port: 80
+        service:
+          name: web
+          port: 80
     config:
       cert-issue-type: none
   - name: e2e-crem-drop
@@ -97,8 +100,9 @@ projects:
       inbound:
         port: 9966
       target:
-        service-name: web
-        port: 80
+        service:
+          name: web
+          port: 80
     config:
       cert-issue-type: none
 

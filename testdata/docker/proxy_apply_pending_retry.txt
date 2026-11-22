@@ -96,8 +96,9 @@ projects:
       inbound:
         port: 9973
       target:
-        service-name: web
-        port: 80
+        service:
+          name: web
+          port: 80
     config:
       cert-issue-type: none
 
@@ -110,8 +111,9 @@ projects:
       inbound:
         port: 9974
       target:
-        service-name: web
-        port: 80
+        service:
+          name: web
+          port: 80
     config:
       cert-issue-type: none
 

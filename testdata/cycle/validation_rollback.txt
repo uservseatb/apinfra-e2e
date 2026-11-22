@@ -51,8 +51,9 @@ projects:
       inbound:
         port: 9999
       target:
-        service-name: web
-        port: 80
+        service:
+          name: web
+          port: 80
     config:
       cert-issue-type: none
 
@@ -66,8 +67,9 @@ projects:
         domain-name: ://example.com
         port: 9999 # INVALID: Mutually exclusive with domain-name
       target:
-        service-name: web
-        port: 80
+        service:
+          name: web
+          port: 80
 
 -- git-repo/dev/e2e-web/docker-compose.yml --
 services:

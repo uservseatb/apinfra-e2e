@@ -1,4 +1,4 @@
-# Scenario: proxy.target.service-name may match the YAML compose service key;
+# Scenario: proxy.target.service.name may match the YAML compose service key;
 # nginx reaches <service_key>.apinfra_<project> on apinfra_proxy_net.
 
 cd git-repo
@@ -35,8 +35,9 @@ projects:
       inbound:
         port: 9999
       target:
-        service-name: api
-        port: 80
+        service:
+          name: api
+          port: 80
     config:
       cert-issue-type: none
 

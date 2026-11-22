@@ -14,7 +14,7 @@ It does **not** contain the agent source. Product code lives in `../apinfra`. Th
 
 | Scenario | Undocumented but implemented |
 |----------|------------------------------|
-| `testdata/docker/container_name_target.txt` | `proxy.target.service-name` may match compose `container_name` (before strip); runtime DNS stays `<service_key>.apinfra_<project>`; `container_name` is stripped before start |
+| `testdata/docker/container_name_target.txt` | `proxy.target.service.name` may match compose `container_name` (before strip); runtime DNS stays `<service_key>.apinfra_<project>`; `container_name` is stripped before start |
 
 ## Prerequisites
 
@@ -133,6 +133,13 @@ Each `testdata/<theme>/<name>.txt` is a testscript archive:
 - Match product behavior from `testdata/README.md` (validation soft-fail, cert rollback, port strip/rewrite, events). Do not assert implementation details that the product README does not promise — **except** intentional omissions listed above (e.g. `container_name_target`).
 - Change only what the task needs; no drive-by refactors of `env/` unless required by the new scenario.
 - In `stderr` / `stdout` patterns, avoid unescaped regex metacharacters (especially `(` `)` `.`) unless intentional — testscript matches as regexp.
+
+#### Stronger nginx / proxy assertions
+
+Conf `grep` + `docker-assert-running` alone do **not** prove Nginx accepted and reloaded the new conf. Prefer these when the scenario’s behavior makes them practical:
+
+1. **HTTP smoke (live request)** — when an upstream is reachable from the proxy (Compose service on `apinfra_proxy_net`, local stub, etc.), finish with a real request through the published inbound, e.g. `curl -sf http://127.0.0.1:<port>/` or for domain TLS: `curl -skf --resolve <domain>:443:127.0.0.1 https://<domain>/`. That catches failed `nginx -s reload` / syntax errors that leave an old or empty conf serving. Skip live curl when the only upstream is an unreachable external host (e.g. `proxy.target.url: https://api.example.org` with no stub) — conf/`proxy_pass` asserts are enough there; do not invent network access to the public internet.
+2. **HTTP → HTTPS redirect block** — when product behavior implies TLS on a domain (mock / ACME / prod) and Nginx should redirect `:80` → `:443`, assert the `listen 80` server block too (`return 301 https://…`), not only `listen 443 ssl` / `ssl_certificate`. Plain `cert-issue-type: none` stays HTTP-only (no redirect) — do not require a 301 there.
 
 ## Commits
 

@@ -47,8 +47,9 @@ projects:
       inbound:
         port: 9815
       target:
-        service-name: web
-        port: 80
+        service:
+          name: web
+          port: 80
     config:
       cert-issue-type: none
 

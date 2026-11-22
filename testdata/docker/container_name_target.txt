@@ -1,4 +1,4 @@
-# Scenario: proxy.target.service-name may match compose container_name; runtime
+# Scenario: proxy.target.service.name may match compose container_name; runtime
 # name is still compose-project based (container_name is stripped before start).
 
 cd git-repo
@@ -40,8 +40,9 @@ projects:
       inbound:
         port: 9999
       target:
-        service-name: fixed-e2e-web
-        port: 80
+        service:
+          name: fixed-e2e-web
+          port: 80
     config:
       cert-issue-type: none
 

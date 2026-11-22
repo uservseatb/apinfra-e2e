@@ -19,6 +19,7 @@ First deploy, idempotent re-run, validation soft-fail / leave prior state alone.
 | `host_layout_perms.txt` | Full-cycle host path modes (apps/`0700`, compose/`.env` `0400`, nginx/ACME `0755`/`0644`, secrets `0600`); legacy loose modes heal |
 | `pending_markers_cleared.txt` | Healthy deploy + idempotent cycle: `infra/.apply_pending`, `apps/<name>/.apply_pending`, and `nginx/.reload_pending` absent; curl through proxy OK |
 | `validation_rollback.txt` | Invalid `settings.yml` soft-fails; prior containers untouched |
+| `target_url_validation.txt` | `proxy.target.url` + `inbound.port`, `url` XOR `service`, or URL with path → soft-fail; prior compose/nginx untouched |
 | `git_login_failed.txt` | Config-repo clone HTTP 401 → `git_login_failed`; cycle aborted; prior Docker/Nginx untouched |
 
 ### `notifications/` — Outbound push (Shoutrrr)
@@ -52,8 +53,9 @@ Ports, `network_mode`, volumes/socket policy, healing, enabling/disabling projec
 | `heal_stopped_container.txt` | Two projects; `docker stop` one service → next cycle starts it again + `container_deployed` (`started=worker`) |
 | `project_disabled_downs.txt` | Two projects; `enabled: false` → `compose down` for that app; sibling stays running |
 | `worker_no_proxy.txt` | Project with no `proxy` still runs; no nginx conf; sibling with proxy keeps routing |
-| `container_name_target.txt` | `proxy.target.service-name` matches `container_name`; name stripped at runtime; nginx uses YAML service DNS |
-| `service_name_target.txt` | `proxy.target.service-name` matches YAML compose service key; nginx DNS `<service_key>.apinfra_<project>`; curl OK |
+| `target_url_keeps_compose.txt` | `proxy.target.url` + project compose folder → compose still applied; nginx uses sibling URL on proxy net (not edge Compose DNS); curl smoke OK |
+| `container_name_target.txt` | `proxy.target.service.name` matches `container_name`; name stripped at runtime; nginx uses YAML service DNS |
+| `service_name_target.txt` | `proxy.target.service.name` matches YAML compose service key; nginx DNS `<service_key>.apinfra_<project>`; curl OK |
 | `no_new_privileges.txt` | `privileged: true` cleared; containers get `security_opt: no-new-privileges:true` |
 | `include_extends_blocked.txt` | Compose `include` / `extends` to host paths ignored; leaked service never starts |
 | `volume_policy_reject.txt` | Host bind + tmpfs → `security_violation` (`disallowed_bind_mount` / `disallowed_volume_type`); prior containers untouched |
@@ -83,6 +85,8 @@ Proxy conf write / restore / port TLS.
 | `proxy_stops_after_project_removed.txt` | Remove project from settings → down + conf gone; curl old port fails, sibling port still OK |
 | `proxy_stops_after_project_disabled.txt` | `enabled: false` → down + conf gone; curl old port fails, sibling port still OK |
 | `reload_pending_retry.txt` | Conf+`-t` OK but `nginx -s reload` fails (docker stub once) → curl inbound ≠ V2; unchanged next cycle retries reload → curl V2; fourth cycle stays V2 (REL-02) |
+| `target_url_skip_compose.txt` | URL-only (no folder) → SkipCompose; HTTP conf/`Host` from URL to sibling on proxy net; curl smoke OK |
+| `target_url_https_upstream.txt` | URL-only `https://` sibling upstream + mock → `:80` 301, `proxy_ssl_server_name`/`Host`; live TLS + redirect smoke |
 
 ### `certs/` — Certificates / ACME
 

@@ -42,8 +42,9 @@ projects:
       inbound:
         domain-name: e2e-http.apinfra.test
       target:
-        service-name: web
-        port: 80
+        service:
+          name: web
+          port: 80
     config:
       cert-issue-type: none
 
