@@ -2,9 +2,9 @@
 # prune are skipped (README docker_login_failed). Regression: previously nginx still
 # ran ("running despite docker errors") and wrote vhosts for apps that never started.
 #
-# Cycle 1: deploy e2e-dskip-a → proxy + nginx conf live.
+# Cycle 1: deploy e2e-dskip-a → proxy + inbound live (curl).
 # Cycle 2: add e2e-dskip-b in Git + bad registry → login fails;
-#          no nginx for B; A's conf unchanged; no "despite docker errors".
+#          B inbound dead; A still answers; no "despite docker errors".
 
 cd git-repo
 exec git init -b main
@@ -21,8 +21,6 @@ exec apinfra
 stderr 'done duration='
 docker-assert-running apinfra-proxy
 docker-assert-running apinfra_e2e-dskip-a-web
-exists $HOME/infra/nginx/conf/dev_e2e-dskip-a.conf
-exec cp $HOME/infra/nginx/conf/dev_e2e-dskip-a.conf $WORK/conf-a.before
 exec curl -sf http://127.0.0.1:9961/
 stdout 'DSKIP_A'
 
@@ -52,9 +50,8 @@ grep 'docker_login_failed' $HOME/.events
 # Compose for B may be on disk; pull/up and nginx must not have applied it.
 exists $HOME/infra/apps/e2e-dskip-b/docker-compose.yml
 ! docker-assert-running apinfra_e2e-dskip-b-web
-! exists $HOME/infra/nginx/conf/dev_e2e-dskip-b.conf
+! exec curl -sf --max-time 3 http://127.0.0.1:9962/
 
-exec cmp $WORK/conf-a.before $HOME/infra/nginx/conf/dev_e2e-dskip-a.conf
 docker-assert-running apinfra-proxy
 docker-assert-running apinfra_e2e-dskip-a-web
 exec curl -sf http://127.0.0.1:9961/

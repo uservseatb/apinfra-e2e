@@ -25,13 +25,7 @@ docker-assert-running apinfra_e2e-origin-web
 exists $HOME/infra/apps/e2e-edge/docker-compose.yml
 exists $HOME/infra/apps/e2e-origin/docker-compose.yml
 
-exists $HOME/infra/nginx/conf/dev_e2e-edge.conf
-grep 'proxy_pass "http://web\.apinfra_e2e-origin"' $HOME/infra/nginx/conf/dev_e2e-edge.conf
-grep 'proxy_set_header Host web\.apinfra_e2e-origin;' $HOME/infra/nginx/conf/dev_e2e-edge.conf
-! grep 'web\.apinfra_e2e-edge' $HOME/infra/nginx/conf/dev_e2e-edge.conf
-! grep 'proxy_ssl_server_name' $HOME/infra/nginx/conf/dev_e2e-edge.conf
-! grep 'proxy_set_header Host \$host;' $HOME/infra/nginx/conf/dev_e2e-edge.conf
-
+# Proxies to sibling URL (ORIGIN_OK), not the edge project's own echo body.
 exec curl -sf --resolve e2e-edge.apinfra.test:80:127.0.0.1 http://e2e-edge.apinfra.test/
 stdout 'ORIGIN_OK'
 

@@ -20,12 +20,12 @@ exists $HOME/infra/mockcerts/e2e-mock.apinfra.test/fullchain.pem
 exists $HOME/infra/mockcerts/e2e-mock.apinfra.test/privkey.pem
 ! exists $HOME/infra/certbot/conf/live/e2e-mock.apinfra.test/fullchain.pem
 
-exists $HOME/infra/nginx/conf/dev_e2e-web.conf
-grep 'server_name e2e-mock\.apinfra\.test' $HOME/infra/nginx/conf/dev_e2e-web.conf
-grep 'listen 443 ssl' $HOME/infra/nginx/conf/dev_e2e-web.conf
-grep '/etc/nginx/mockcerts/e2e-mock\.apinfra\.test/fullchain\.pem' $HOME/infra/nginx/conf/dev_e2e-web.conf
-
 docker-assert-running apinfra_e2e-web-web-1
+
+exec curl -skf --resolve e2e-mock.apinfra.test:443:127.0.0.1 https://e2e-mock.apinfra.test/
+stdout 'OK'
+exec curl -sI --resolve e2e-mock.apinfra.test:80:127.0.0.1 http://e2e-mock.apinfra.test/
+stdout '301'
 
 -- .apinfra.template --
 namespace=dev

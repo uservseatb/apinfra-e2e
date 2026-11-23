@@ -17,10 +17,8 @@ stderr 'done duration='
 
 docker-assert-running apinfra_e2e-web-api
 
-exists $HOME/infra/nginx/conf/dev_e2e-web.conf
-grep 'api\.apinfra_e2e-web' $HOME/infra/nginx/conf/dev_e2e-web.conf
-
 exec curl -sf http://127.0.0.1:9999/
+stdout 'OK'
 
 -- .apinfra.template --
 namespace=dev

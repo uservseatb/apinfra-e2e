@@ -15,8 +15,8 @@ exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
 exec apinfra
 stderr 'done duration='
 docker-assert-running apinfra_e2e-web-web-1
-exists $HOME/infra/nginx/conf/dev_e2e-web.conf
-grep 'web\.apinfra_e2e-web' $HOME/infra/nginx/conf/dev_e2e-web.conf
+exec curl -sf http://127.0.0.1:9999/
+stdout 'OK'
 
 # url is only allowed with inbound.domain-name (not inbound.port)
 cd git-repo
@@ -28,11 +28,11 @@ cd ..
 exec apinfra
 stderr 'WARN cycle finished with errors'
 stderr 'invalid settings.yml format'
-stderr 'only allowed with proxy\.inbound\.domain-name'
+stderr 'only allowed with .*inbound\.domain-name'
 stderr 'done duration='
 docker-assert-running apinfra_e2e-web-web-1
-exists $HOME/infra/nginx/conf/dev_e2e-web.conf
-grep 'web\.apinfra_e2e-web' $HOME/infra/nginx/conf/dev_e2e-web.conf
+exec curl -sf http://127.0.0.1:9999/
+stdout 'OK'
 
 # url XOR proxy.target.service
 cd git-repo
@@ -44,11 +44,11 @@ cd ..
 exec apinfra
 stderr 'WARN cycle finished with errors'
 stderr 'invalid settings.yml format'
-stderr 'proxy\.target\.url and proxy\.target\.service are mutually exclusive'
+stderr 'target\.url and .*target\.service are mutually exclusive'
 stderr 'done duration='
 docker-assert-running apinfra_e2e-web-web-1
-exists $HOME/infra/nginx/conf/dev_e2e-web.conf
-grep 'web\.apinfra_e2e-web' $HOME/infra/nginx/conf/dev_e2e-web.conf
+exec curl -sf http://127.0.0.1:9999/
+stdout 'OK'
 
 # url must be scheme://host[:port] only (path rejected)
 cd git-repo
@@ -63,8 +63,8 @@ stderr 'invalid settings.yml format'
 stderr 'must not include a path'
 stderr 'done duration='
 docker-assert-running apinfra_e2e-web-web-1
-exists $HOME/infra/nginx/conf/dev_e2e-web.conf
-grep 'web\.apinfra_e2e-web' $HOME/infra/nginx/conf/dev_e2e-web.conf
+exec curl -sf http://127.0.0.1:9999/
+stdout 'OK'
 
 -- .apinfra.template --
 namespace=dev

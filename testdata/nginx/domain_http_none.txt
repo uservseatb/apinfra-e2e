@@ -20,14 +20,14 @@ exists $HOME/.certs.json
 grep 'e2e-http\.apinfra\.test' $HOME/.certs.json
 grep '"active_mode": "none"' $HOME/.certs.json
 
-exists $HOME/infra/nginx/conf/dev_e2e-web.conf
-grep 'server_name e2e-http\.apinfra\.test' $HOME/infra/nginx/conf/dev_e2e-web.conf
-grep 'listen 80;' $HOME/infra/nginx/conf/dev_e2e-web.conf
-! grep 'ssl_certificate' $HOME/infra/nginx/conf/dev_e2e-web.conf
-! grep 'return 301' $HOME/infra/nginx/conf/dev_e2e-web.conf
-! grep 'listen 443' $HOME/infra/nginx/conf/dev_e2e-web.conf
-
 docker-assert-running apinfra_e2e-web-web-1
+
+# Plain HTTP on :80; no TLS / no redirect.
+exec curl -sf --resolve e2e-http.apinfra.test:80:127.0.0.1 http://e2e-http.apinfra.test/
+stdout 'OK'
+exec curl -sI --resolve e2e-http.apinfra.test:80:127.0.0.1 http://e2e-http.apinfra.test/
+! stdout '301'
+! exec curl -skf --max-time 3 --resolve e2e-http.apinfra.test:443:127.0.0.1 https://e2e-http.apinfra.test/
 
 -- .apinfra.template --
 namespace=dev

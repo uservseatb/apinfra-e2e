@@ -18,10 +18,6 @@ stderr 'done duration='
 
 docker-assert-running apinfra_e2e-keep-web
 docker-assert-running apinfra_e2e-drop-web
-exists $HOME/infra/nginx/conf/dev_e2e-keep.conf
-exists $HOME/infra/nginx/conf/dev_e2e-drop.conf
-grep 'listen 9999' $HOME/infra/nginx/conf/dev_e2e-keep.conf
-grep 'listen 9998' $HOME/infra/nginx/conf/dev_e2e-drop.conf
 
 exec curl -sf http://127.0.0.1:9999/
 exec curl -sf http://127.0.0.1:9998/
@@ -39,8 +35,6 @@ stderr 'down unused project=e2e-drop'
 
 ! docker-assert-running apinfra_e2e-drop-web
 docker-assert-running apinfra_e2e-keep-web
-! exists $HOME/infra/nginx/conf/dev_e2e-drop.conf
-exists $HOME/infra/nginx/conf/dev_e2e-keep.conf
 
 exec curl -sf http://127.0.0.1:9999/
 ! exec curl -sf --max-time 3 http://127.0.0.1:9998/

@@ -25,7 +25,6 @@ stderr 'done duration='
 docker-assert-running apinfra_e2e-reload-web
 exec curl -sf http://127.0.0.1:9976/
 stdout 'RELOAD_MARKER_V1'
-grep 'web\.apinfra_e2e-reload:80' $HOME/infra/nginx/conf/dev_e2e-reload.conf
 
 # PATH stub: fail the next `docker exec apinfra-proxy nginx -s reload` once.
 exec sh -c 'command -v docker > "$HOME/real-docker"'
@@ -45,7 +44,6 @@ stderr 'e2e stub: failing nginx -s reload'
 stderr 'WARN cycle finished with errors'
 stderr 'done duration='
 
-grep 'web\.apinfra_e2e-reload:8080' $HOME/infra/nginx/conf/dev_e2e-reload.conf
 docker-assert-running apinfra_e2e-reload-web
 # Live nginx still on :80 while app only listens on :8080 → proxy not serving V2.
 ! exec curl -sf --max-time 3 http://127.0.0.1:9976/

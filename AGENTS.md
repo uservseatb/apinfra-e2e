@@ -129,17 +129,27 @@ Each `testdata/<theme>/<name>.txt` is a testscript archive:
 - Prefer **environment stubs** over Go mocks: local `file://` Git, fake `bin/dig` on `PATH`, Pebble, ACME 429 stub.
 - Keep scenarios focused (one behavior). Reuse the `hashicorp/http-echo` stub pattern from existing files (`command: ["-listen=:80", "-text=…"]`).
 - ACME domain scenarios need DNS preflight: ship a tiny `bin/dig` stub and `chmod 0755` + prepend `PATH`.
+- Quiet cycles that must hit ACME while proxy compose is unchanged need `proxyReadyAfter=1s` (default is 30s) or an explicit `sleep` past the ready window — otherwise the agent skips issuance with `proxy not ready` and never reaches CA/rate-limit stubs.
 - Always stop Pebble / rate-limit / git-authfail / notify-hook servers started in the script (`pebble-stop`, `acme-ratelimit-stop`, `git-authfail-stop`, `notify-hook-stop`).
 - Match product behavior from `testdata/README.md` (validation soft-fail, cert rollback, port strip/rewrite, events). Do not assert implementation details that the product README does not promise — **except** intentional omissions listed above (e.g. `container_name_target`).
 - Change only what the task needs; no drive-by refactors of `env/` unless required by the new scenario.
 - In `stderr` / `stdout` patterns, avoid unescaped regex metacharacters (especially `(` `)` `.`) unless intentional — testscript matches as regexp.
 
-#### Stronger nginx / proxy assertions
+#### Black-box focus (required)
 
-Conf `grep` + `docker-assert-running` alone do **not** prove Nginx accepted and reloaded the new conf. Prefer these when the scenario’s behavior makes them practical:
+Scenarios treat `apinfra` as a **black box**: assert observable outcomes the product README promises (HTTP(S) through the proxy, Docker containers/ports, soft-fail / events / retries, host modes where documented). How the agent lays out files under `infra/nginx/conf/` is an **implementation detail**.
 
-1. **HTTP smoke (live request)** — when an upstream is reachable from the proxy (Compose service on `apinfra_proxy_net`, local stub, etc.), finish with a real request through the published inbound, e.g. `curl -sf http://127.0.0.1:<port>/` or for domain TLS: `curl -skf --resolve <domain>:443:127.0.0.1 https://<domain>/`. That catches failed `nginx -s reload` / syntax errors that leave an old or empty conf serving. Skip live curl when the only upstream is an unreachable external host (e.g. `proxy.target.url: https://api.example.org` with no stub) — conf/`proxy_pass` asserts are enough there; do not invent network access to the public internet.
-2. **HTTP → HTTPS redirect block** — when product behavior implies TLS on a domain (mock / ACME / prod) and Nginx should redirect `:80` → `:443`, assert the `listen 80` server block too (`return 301 https://…`), not only `listen 443 ssl` / `ssl_certificate`. Plain `cert-issue-type: none` stays HTTP-only (no redirect) — do not require a 301 there.
+- **Do not** assert on Nginx vhost **file names or paths** (`exists $HOME/infra/nginx/conf/<ns>_<project>….conf`, `grep … that file`, `cmp` of conf snapshots). Naming schemes (`dev_app.conf` vs `dev_app__port-9999.conf`, etc.) may change without a README contract change.
+- **Do** prove routing with **live requests** through the published inbound (see below). Soft-fail / rollback / “prior proxy kept” means the **old URL still answers** (or the new one does not), not that a particular conf file is back on disk.
+- Host-layout / permission checks may inspect `infra/nginx/conf/` as a **directory** (mode of the dir, or “some project `*.conf` under it is `0644`” via a small shell helper). Do not hard-code a single vhost basename.
+- Written Compose under `infra/apps/`, `.events`, `.retries`, cert PEMs under paths the README names (`mockcerts/`, `certbot/conf/live/`) remain fair game when the scenario is about that contract.
+
+#### Nginx / proxy assertions
+
+`docker-assert-running` alone does **not** prove Nginx accepted and reloaded routing. Prefer:
+
+1. **HTTP smoke (live request)** — when an upstream is reachable from the proxy (Compose service on `apinfra_proxy_net`, local stub, etc.), finish with a real request through the published inbound, e.g. `curl -sf http://127.0.0.1:<port>/` or for domain TLS: `curl -skf --resolve <domain>:443:127.0.0.1 https://<domain>/`. That catches failed `nginx -s reload` / syntax errors that leave an old or empty conf serving. Skip live curl when the only upstream is an unreachable external host (e.g. `target.url: https://api.example.org` with no stub) — then assert via stderr / soft-fail / Docker only; do **not** invent public-internet access and do **not** fall back to grepping vhost filenames. Right after a cycle that reloads TLS on a **new inbound port**, a short curl retry loop is OK — `nginx -s reload` can briefly refuse the handshake (curl exit 35) while workers swap.
+2. **HTTP → HTTPS redirect** — when product behavior implies TLS on a domain (mock / ACME / prod), assert redirect with a live request (e.g. `curl -sI` / follow checks showing `:80` → `:443`), not by grepping `return 301` out of a conf file. Plain `cert-issue-type: none` stays HTTP-only (no redirect) — do not require a 301 there.
 
 ## Commits
 

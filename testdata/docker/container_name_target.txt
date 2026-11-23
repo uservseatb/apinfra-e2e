@@ -19,13 +19,12 @@ docker-assert-running apinfra_e2e-web-web
 # Fixed container_name must not appear as the Docker Name.
 exec sh -c '! docker ps -a --format "{{.Names}}" | grep -qx fixed-e2e-web'
 
-exists $HOME/infra/nginx/conf/dev_e2e-web.conf
-# Nginx reaches YAML service key on apinfra_proxy_net, not the stripped container_name.
-grep 'web\.apinfra_e2e-web' $HOME/infra/nginx/conf/dev_e2e-web.conf
-! grep 'fixed-e2e-web' $HOME/infra/nginx/conf/dev_e2e-web.conf
-
 exists $HOME/infra/apps/e2e-web/docker-compose.yml
 ! grep 'container_name' $HOME/infra/apps/e2e-web/docker-compose.yml
+
+# Proxy still reaches the service (YAML key DNS after container_name strip).
+exec curl -sf http://127.0.0.1:9999/
+stdout 'OK'
 
 -- .apinfra.template --
 namespace=dev

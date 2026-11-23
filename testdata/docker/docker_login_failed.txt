@@ -33,7 +33,7 @@ grep '127.0.0.1:1' $HOME/.events
 # Compose may already be on disk; this cycle must not have started the app or nginx.
 exists $HOME/infra/apps/e2e-dlogin/docker-compose.yml
 ! docker-assert-running apinfra_e2e-dlogin-web
-! exists $HOME/infra/nginx/conf/dev_e2e-dlogin.conf
+! exec curl -sf --max-time 3 http://127.0.0.1:9999/
 
 -- .apinfra.template --
 namespace=dev

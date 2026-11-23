@@ -21,18 +21,11 @@ docker-assert-running apinfra-proxy
 docker-assert-running apinfra_e2e-origin-web
 ! exists $HOME/infra/apps/e2e-edge
 
-exists $HOME/infra/nginx/conf/dev_e2e-edge.conf
-grep 'server_name e2e-edge\.apinfra\.test' $HOME/infra/nginx/conf/dev_e2e-edge.conf
-grep 'listen 80;' $HOME/infra/nginx/conf/dev_e2e-edge.conf
-grep 'proxy_pass "http://web\.apinfra_e2e-origin"' $HOME/infra/nginx/conf/dev_e2e-edge.conf
-grep 'proxy_set_header Host web\.apinfra_e2e-origin;' $HOME/infra/nginx/conf/dev_e2e-edge.conf
-! grep 'proxy_ssl_server_name' $HOME/infra/nginx/conf/dev_e2e-edge.conf
-! grep 'apinfra_e2e-edge' $HOME/infra/nginx/conf/dev_e2e-edge.conf
-! grep 'ssl_certificate' $HOME/infra/nginx/conf/dev_e2e-edge.conf
-! grep 'return 301' $HOME/infra/nginx/conf/dev_e2e-edge.conf
-
+# URL Host reaches sibling on proxy net (not edge's own compose DNS).
 exec curl -sf --resolve e2e-edge.apinfra.test:80:127.0.0.1 http://e2e-edge.apinfra.test/
 stdout 'ORIGIN_OK'
+exec curl -sI --resolve e2e-edge.apinfra.test:80:127.0.0.1 http://e2e-edge.apinfra.test/
+! stdout '301'
 
 -- .apinfra.template --
 namespace=dev

@@ -16,10 +16,11 @@ First deploy, idempotent re-run, validation soft-fail / leave prior state alone.
 |------|--------|
 | `happy_path.txt` | First deploy: compose up, proxy, `done duration=` |
 | `idempotency.txt` | Second cycle with unchanged Git leaves stack running |
-| `host_layout_perms.txt` | Full-cycle host path modes (apps/`0700`, compose/`.env` `0400`, nginx/ACME `0755`/`0644`, secrets `0600`); legacy loose modes heal |
+| `host_layout_perms.txt` | Full-cycle host path modes (apps/`0700`, compose/`.env` `0400`, nginx/ACME dirs `0755`/`0644` via glob for vhosts, secrets `0600`); legacy loose modes heal; curl inbound OK |
 | `pending_markers_cleared.txt` | Healthy deploy + idempotent cycle: `infra/.apply_pending`, `apps/<name>/.apply_pending`, and `nginx/.reload_pending` absent; curl through proxy OK |
 | `validation_rollback.txt` | Invalid `settings.yml` soft-fails; prior containers untouched |
 | `target_url_validation.txt` | `proxy.target.url` + `inbound.port`, `url` XOR `service`, or URL with path → soft-fail; prior compose/nginx untouched |
+| `proxies_validation.txt` | `proxy` XOR `proxies`, empty `proxies`, duplicate inbound domain/port → soft-fail; prior compose/nginx untouched |
 | `git_login_failed.txt` | Config-repo clone HTTP 401 → `git_login_failed`; cycle aborted; prior Docker/Nginx untouched |
 
 ### `notifications/` — Outbound push (Shoutrrr)
@@ -42,8 +43,8 @@ Ports, `network_mode`, volumes/socket policy, healing, enabling/disabling projec
 | `port_stripping.txt` | Default: compose `ports` stripped (no public host publish) |
 | `port_mapping.txt` | `allow-ports-mapping: true` keeps ports; unbound host IP → `127.0.0.1` |
 | `port_mapping_reject_wildcard.txt` | `allow-ports-mapping: true` + `0.0.0.0` / `::` → soft-fail; prior containers untouched |
-| `docker_login_failed.txt` | Full registry creds + failed `docker login` → `docker_login_failed`; compose written; no app up; nginx + prune skipped |
-| `docker_login_skips_nginx.txt` | Proxy already up; add project + failed login → nginx skipped (no conf for new app; prior conf unchanged); no "despite docker errors" |
+| `docker_login_failed.txt` | Full registry creds + failed `docker login` → `docker_login_failed`; compose written; no app up; inbound curl fails; prune skipped |
+| `docker_login_skips_nginx.txt` | Proxy already up; add project + failed login → new inbound dead, prior curl OK; no "despite docker errors" |
 | `apply_pending_retry.txt` | Compose change + failed login keeps same container on V1; fix host registry (no Git) → next cycle recreates container serving V2; fourth cycle stays on V2 |
 | `proxy_apply_pending_retry.txt` | Proxy inbound.port change + failed login keeps same `apinfra-proxy` cid and old port; `infra/.apply_pending` stays; fix host registry (no Git) → next cycle restarts proxy on new port and clears pending |
 | `network_mode_stripped.txt` | Any custom `network_mode` (`host`, `bridge`, …) stripped before start; written compose has none |
@@ -52,7 +53,7 @@ Ports, `network_mode`, volumes/socket policy, healing, enabling/disabling projec
 | `heal_deleted_container.txt` | Two projects; `docker rm` one service → next cycle recreates it + `container_deployed` (`added=worker`) |
 | `heal_stopped_container.txt` | Two projects; `docker stop` one service → next cycle starts it again + `container_deployed` (`started=worker`) |
 | `project_disabled_downs.txt` | Two projects; `enabled: false` → `compose down` for that app; sibling stays running |
-| `worker_no_proxy.txt` | Project with no `proxy` still runs; no nginx conf; sibling with proxy keeps routing |
+| `worker_no_proxy.txt` | Project with no `proxies`/`proxy` still runs (no public ports); sibling with proxy answers curl |
 | `target_url_keeps_compose.txt` | `proxy.target.url` + project compose folder → compose still applied; nginx uses sibling URL on proxy net (not edge Compose DNS); curl smoke OK |
 | `container_name_target.txt` | `proxy.target.service.name` matches `container_name`; name stripped at runtime; nginx uses YAML service DNS |
 | `service_name_target.txt` | `proxy.target.service.name` matches YAML compose service key; nginx DNS `<service_key>.apinfra_<project>`; curl OK |
@@ -78,10 +79,12 @@ Proxy conf write / restore / port TLS.
 
 | File | Covers |
 |------|--------|
-| `nginx_conf_rollback.txt` | Failed ACME after conf rewrite restores prior nginx conf |
-| `port_mock_https.txt` | `inbound.port` + `cert-issue-type: mock` → `listen … ssl` + `mockcerts/port-<port>/` |
-| `domain_http_none.txt` | Domain + `cert-issue-type: none` → plain HTTP `:80`, no TLS/redirect; `.certs.json` `active_mode` → `none` |
-| `domain_prod_switch_fail_keeps_proxy.txt` | Prod domain A live (curl); switch to B + non-429 ACME fail → block B, rollback conf A, curl A still OK |
+| `nginx_conf_rollback.txt` | Same-domain `none` → failed prod ACME → live `:80` HTTP restored (no TLS left up) |
+| `multi_proxies_routes.txt` | `projects[].proxies`: one stack, two port routes → curl both services |
+| `proxies_per_route_cert.txt` | Project cert default `none` on port; route-level `mock` on domain → curl HTTP + HTTPS + 301 |
+| `port_mock_https.txt` | `inbound.port` (9443) + `cert-issue-type: mock` → `mockcerts/port-9443/` + live HTTPS curl (plain HTTP fails) |
+| `domain_http_none.txt` | Domain + `cert-issue-type: none` → `.certs.json` `none`; live HTTP curl, no 301 / no HTTPS |
+| `domain_prod_switch_fail_keeps_proxy.txt` | Prod domain A live (curl); add domain B + non-429 ACME fail → block B, curl A still OK / B not |
 | `proxy_stops_after_project_removed.txt` | Remove project from settings → down + conf gone; curl old port fails, sibling port still OK |
 | `proxy_stops_after_project_disabled.txt` | `enabled: false` → down + conf gone; curl old port fails, sibling port still OK |
 | `reload_pending_retry.txt` | Conf+`-t` OK but `nginx -s reload` fails (docker stub once) → curl inbound ≠ V2; unchanged next cycle retries reload → curl V2; fourth cycle stays V2 (REL-02) |
@@ -100,7 +103,7 @@ Issue, fallback, downgrade, retries, DNS preflight, mock self-signed.
 | `cert_issue_failed.txt` | Non–rate-limit ACME fail → `.retries` block + `cert_issue_failed`; next cycle skips CA |
 | `dns_preflight_skip.txt` | Empty `dig +short` skips ACME for the cycle (no retry / downgrade / `.certs.json` / cert events; `container_deployed` ok) |
 | `dns_preflight_public_ip.txt` | Configured `hostPublicIP` matches or mismatches dig IP -> pass or skip cycle (mismatch: no cert events) |
-| `mock_domain_cert.txt` | Domain + `mock` → local PEMs under `mockcerts/<domain>/` (no ACME); nginx HTTPS |
+| `mock_domain_cert.txt` | Domain + `mock` → local PEMs under `mockcerts/<domain>/` (no ACME); live HTTPS + `:80` 301 |
 | `prod_mode_switch_retains.txt` | Intentional `prod → test → prod`: staging on disk mid-step; prod restored from `.certs.json` without second obtain |
 | `certs_json_cold_restore.txt` | Delete `live/` PEMs; next cycle materializes from `.certs.json` without ACME obtain |
 | `prod_soft_ttl_reissue.txt` | Backdate `issued_at` past soft TTL (live PEMs + prod cache kept); `proxyReadyAfter=1s` → second ACME obtain (not restore) |

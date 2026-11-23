@@ -1,0 +1,63 @@
+# Scenario: projects[].proxies — one Compose stack, two Nginx port routes to
+# different services; live curl through both inbounds.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: multi proxies storefront'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'done duration='
+! stderr 'WARN cycle finished with errors'
+
+docker-assert-running apinfra_e2e-shop-web
+docker-assert-running apinfra_e2e-shop-api
+
+exec curl -sf http://127.0.0.1:9991/
+stdout 'SHOP_WEB'
+exec curl -sf http://127.0.0.1:9992/
+stdout 'SHOP_API'
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+projects:
+  - name: e2e-shop
+    enabled: true
+    proxies:
+      - inbound:
+          port: 9991
+        target:
+          service:
+            name: web
+            port: 80
+        config:
+          cert-issue-type: none
+      - inbound:
+          port: 9992
+        target:
+          service:
+            name: api
+            port: 80
+        config:
+          cert-issue-type: none
+
+-- git-repo/dev/e2e-shop/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=SHOP_WEB"]
+  api:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=SHOP_API"]
+
+-- .env --

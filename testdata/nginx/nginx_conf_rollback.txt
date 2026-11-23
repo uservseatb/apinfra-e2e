@@ -1,27 +1,28 @@
-# Scenario: nginx conf rollback after failed ACME issue.
-# 1) Deploy port-only HTTP (cert none) → conf listens on inbound port.
-# 2) Switch to domain + prod ACME against 429 stub → new conf is written then restored.
+# Scenario: nginx routing rollback after failed ACME (same domain identity).
+# 1) Deploy domain + cert none → plain HTTP answers.
+# 2) Switch same domain to prod ACME against 429 stub → conf rewritten then
+#    restored; live :80 still serves HTTP (no broken TLS vhost left up).
 
 cd git-repo
 exec git init -b main
 exec git config user.email 'test@apinfra.local'
 exec git config user.name 'Test Agent'
 exec git add .
-exec git commit -m 'feat: port-only baseline'
+exec git commit -m 'feat: domain http-none baseline'
 cd ..
 
 cp .apinfra.template .apinfra
 exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
 
-# Cycle 1: port-only, no ACME.
+# Cycle 1: domain HTTP, no ACME.
 exec apinfra
 stderr 'done duration='
-exists $HOME/infra/nginx/conf/dev_e2e-web.conf
-grep 'listen 9999' $HOME/infra/nginx/conf/dev_e2e-web.conf
-! grep 'server_name e2e-rollback.apinfra.test' $HOME/infra/nginx/conf/dev_e2e-web.conf
 docker-assert-running apinfra_e2e-web-web-1
+exec curl -sf --resolve e2e-rollback.apinfra.test:80:127.0.0.1 http://e2e-rollback.apinfra.test/
+stdout 'OK'
+! exec curl -skf --max-time 3 --resolve e2e-rollback.apinfra.test:443:127.0.0.1 https://e2e-rollback.apinfra.test/
 
-# Cycle 2: domain + prod; conf changes (reload-before-issue), ACME rate-limits, conf restored.
+# Cycle 2: same domain + prod; ACME rate-limits; routing rolled back to HTTP-none.
 acme-ratelimit-start
 chmod 0755 bin/dig
 env PATH=$WORK/bin:$PATH
@@ -37,17 +38,18 @@ stderr 'rate limited domain=e2e-rollback.apinfra.test'
 stderr 'rolled back those service confs'
 stderr 'done duration='
 
-# Pre-cycle port conf must be restored (not left as domain/ssl live vhost).
-grep 'listen 9999' $HOME/infra/nginx/conf/dev_e2e-web.conf
-! grep 'server_name e2e-rollback.apinfra.test' $HOME/infra/nginx/conf/dev_e2e-web.conf
-! grep 'ssl/live/e2e-rollback.apinfra.test' $HOME/infra/nginx/conf/dev_e2e-web.conf
 docker-assert-running apinfra_e2e-web-web-1
+exec curl -sf --resolve e2e-rollback.apinfra.test:80:127.0.0.1 http://e2e-rollback.apinfra.test/
+stdout 'OK'
+! exec curl -skf --max-time 3 --resolve e2e-rollback.apinfra.test:443:127.0.0.1 https://e2e-rollback.apinfra.test/
 
 acme-ratelimit-stop
 
 -- .apinfra.template --
 namespace=dev
 repoBranch=main
+# Cycle 2 keeps proxy compose unchanged; ACME needs proxyReadyAfter elapsed.
+proxyReadyAfter=1s
 certs.provider=letsencrypt
 certs.letsencrypt.directory=https://localhost:18080/directory
 certs.letsencrypt.stagingDirectory=https://localhost:18080/directory
@@ -59,7 +61,7 @@ projects:
     enabled: true
     proxy:
       inbound:
-        port: 9999
+        domain-name: e2e-rollback.apinfra.test
       target:
         service:
           name: web

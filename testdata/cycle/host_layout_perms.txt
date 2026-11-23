@@ -22,10 +22,13 @@ exists $HOME/infra/apps/e2ecycle/docker-compose.yml
 exists $HOME/infra/apps/e2ecycle/.env
 exists $HOME/infra/docker-compose.yml
 exists $HOME/infra/nginx/nginx.conf
-exists $HOME/infra/nginx/conf/dev_e2ecycle.conf
+exists $HOME/infra/nginx/conf
 exists $HOME/infra/nginx/leconf/options-ssl-nginx.conf
 exists $HOME/apinfra.lock
 grep 'review-secret-sentinel' $HOME/infra/apps/e2ecycle/docker-compose.yml
+
+exec curl -sf http://127.0.0.1:9975/
+stdout 'OK'
 
 exec ./check-perms.sh
 stdout 'layout_perms_ok'
@@ -83,8 +86,18 @@ check "$HOME/infra/apps/e2ecycle/docker-compose.yml" 400
 check "$HOME/infra/apps/e2ecycle/.env" 400
 check "$HOME/infra/docker-compose.yml" 644
 check "$HOME/infra/nginx/nginx.conf" 644
-check "$HOME/infra/nginx/conf/dev_e2ecycle.conf" 644
 check "$HOME/infra/nginx/leconf/options-ssl-nginx.conf" 644
+# Project vhost basename is an implementation detail; require some route conf @ 644.
+found=
+for f in "$HOME/infra/nginx/conf"/dev_e2ecycle*.conf; do
+	[ -f "$f" ] || continue
+	check "$f" 644
+	found=1
+done
+if [ -z "$found" ]; then
+	echo "FAIL no project vhost conf under nginx/conf" >&2
+	exit 1
+fi
 check "$HOME/.apinfra" 600
 check "$HOME/.env" 600
 check "$HOME/apinfra.lock" 600

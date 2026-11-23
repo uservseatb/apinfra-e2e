@@ -1,5 +1,5 @@
 # Scenario: inbound.port + cert-issue-type mock → self-signed HTTPS on that host
-# port (PEMs under mockcerts/port-<port>/; nginx listen … ssl).
+# port (PEMs under mockcerts/port-<port>/; live HTTPS curl).
 
 cd git-repo
 exec git init -b main
@@ -13,18 +13,19 @@ cp .apinfra.template .apinfra
 exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
 
 exec apinfra
-stderr 'cert issued name=port-8443 mode=mock'
+stderr 'cert issued name=port-9443 mode=mock'
 stderr 'done duration='
 
-exists $HOME/infra/mockcerts/port-8443/fullchain.pem
-exists $HOME/infra/mockcerts/port-8443/privkey.pem
-
-exists $HOME/infra/nginx/conf/dev_e2e-web.conf
-grep 'listen 8443 ssl' $HOME/infra/nginx/conf/dev_e2e-web.conf
-grep '/etc/nginx/mockcerts/port-8443/fullchain\.pem' $HOME/infra/nginx/conf/dev_e2e-web.conf
-! grep 'listen 8443;' $HOME/infra/nginx/conf/dev_e2e-web.conf
+exists $HOME/infra/mockcerts/port-9443/fullchain.pem
+exists $HOME/infra/mockcerts/port-9443/privkey.pem
 
 docker-assert-running apinfra_e2e-web-web-1
+
+# Self-signed HTTPS on the inbound port (not plain HTTP).
+# Retry: nginx -s reload can briefly refuse TLS while workers swap.
+exec sh -c 'for i in 1 2 3 4 5 6 7 8; do curl -skf https://127.0.0.1:9443/ && exit 0; sleep 1; done; echo "HTTPS on :9443 never became ready" >&2; exit 1'
+stdout 'OK'
+! exec curl -sf --max-time 3 http://127.0.0.1:9443/
 
 -- .apinfra.template --
 namespace=dev
@@ -37,7 +38,7 @@ projects:
     enabled: true
     proxy:
       inbound:
-        port: 8443
+        port: 9443
       target:
         service:
           name: web

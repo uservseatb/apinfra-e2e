@@ -16,7 +16,8 @@ exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
 exec apinfra
 stderr 'done duration='
 docker-assert-running apinfra_e2e-web-web
-exists $HOME/infra/nginx/conf/dev_e2e-web.conf
+exec curl -sf http://127.0.0.1:9999/
+stdout 'OK'
 exists $HOME/.events
 grep 'container_deployed' $HOME/.events
 ! grep 'git_login_failed' $HOME/.events
@@ -37,7 +38,8 @@ grep 'git_login_failed' $HOME/.events
 grep 'http://127.0.0.1:18081/repo' $HOME/.events
 
 docker-assert-running apinfra_e2e-web-web
-exists $HOME/infra/nginx/conf/dev_e2e-web.conf
+exec curl -sf http://127.0.0.1:9999/
+stdout 'OK'
 
 git-authfail-stop
 

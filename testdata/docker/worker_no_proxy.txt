@@ -1,5 +1,5 @@
-# Scenario: project without proxy still runs; no Nginx conf is generated for it.
-# README worker example: omit proxy → compose up only; sibling with proxy keeps routing.
+# Scenario: project without proxies/proxy still runs; no Nginx conf is generated.
+# README worker example: omit proxies/proxy → compose up only; sibling keeps routing.
 
 cd git-repo
 exec git init -b main
@@ -19,8 +19,9 @@ docker-assert-running apinfra_e2e-web-web
 docker-assert-running apinfra_e2e-worker-bot
 docker-assert-no-public-ports apinfra_e2e-worker-bot
 
-exists $HOME/infra/nginx/conf/dev_e2e-web.conf
-! exists $HOME/infra/nginx/conf/dev_e2e-worker.conf
+# Sibling with proxy is routable; worker has no inbound.
+exec curl -sf http://127.0.0.1:9999/
+stdout 'OK'
 
 -- .apinfra.template --
 namespace=dev
