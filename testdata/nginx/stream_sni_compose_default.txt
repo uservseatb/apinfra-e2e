@@ -1,0 +1,146 @@
+# Scenario: stream.sni.enabled with Compose default (no routes): unmapped SNI
+# TCP-proxies to the TLS backend; managed mock domain still terminates on :443;
+# :80 redirect unchanged.
+
+cd git-repo
+exec git init -b main
+exec git config user.email 'test@apinfra.local'
+exec git config user.name 'Test Agent'
+exec git add .
+exec git commit -m 'feat: stream sni compose default fixture'
+cd ..
+
+cp .apinfra.template .apinfra
+exec sh -c 'echo "repo=file://'$WORK'/git-repo" >> .apinfra'
+
+exec apinfra
+stderr 'cert issued name=e2e-shop\.apinfra\.test mode=mock'
+stderr 'done duration='
+! stderr 'WARN cycle finished with errors'
+
+docker-assert-running apinfra-proxy
+docker-assert-running apinfra_e2e-shop-web
+docker-assert-running apinfra_e2e-broker-broker
+docker-assert-no-public-ports apinfra_e2e-broker-broker
+grep apinfra_proxy_net $HOME/infra/apps/e2e-broker/docker-compose.yml
+
+# Managed domain still works through the SNI front.
+# Require body OK: with Compose default, a premature map miss returns HTTP 200
+# PASSTHROUGH from the broker, which curl -f would treat as success.
+exec sh -c 'for i in 1 2 3 4 5 6 7 8; do body=$(curl -skf --resolve e2e-shop.apinfra.test:443:127.0.0.1 https://e2e-shop.apinfra.test/ 2>/dev/null) || { sleep 1; continue; }; echo "$body" | grep -q OK || { sleep 1; continue; }; printf "%s\n" "$body"; exit 0; done; echo "shop HTTPS never ready" >&2; exit 1'
+stdout 'OK'
+exec curl -sI --resolve e2e-shop.apinfra.test:80:127.0.0.1 http://e2e-shop.apinfra.test/
+stdout '301'
+
+# Unmapped SNI follows Compose default → backend body + cert.
+exec sh -c 'for i in 1 2 3 4 5 6 7 8; do curl -skf --resolve mqtt.e2e.apinfra.test:443:127.0.0.1 https://mqtt.e2e.apinfra.test/ && exit 0; sleep 1; done; echo "mqtt HTTPS never ready" >&2; exit 1'
+stdout 'PASSTHROUGH'
+exec sh -c 'curl -skv --resolve mqtt.e2e.apinfra.test:443:127.0.0.1 https://mqtt.e2e.apinfra.test/ >/dev/null 2>mqtt-tls.err; grep -i "subject:.*mqtt\.e2e\.apinfra\.test" mqtt-tls.err'
+
+-- .apinfra.template --
+namespace=dev
+repoBranch=main
+
+-- git-repo/dev/settings.yml --
+version: "1.0"
+stream:
+  sni:
+    enabled: true
+    default:
+      project: e2e-broker
+      service-name: broker
+      port: 8883
+projects:
+  - name: e2e-shop
+    enabled: true
+    proxy:
+      inbound:
+        domain-name: e2e-shop.apinfra.test
+      target:
+        service:
+          name: web
+          port: 80
+    config:
+      cert-issue-type: mock
+  - name: e2e-broker
+    enabled: true
+    config: {}
+
+-- git-repo/dev/e2e-shop/docker-compose.yml --
+services:
+  web:
+    image: hashicorp/http-echo:latest
+    command: ["-listen=:80", "-text=OK"]
+
+-- git-repo/dev/e2e-broker/docker-compose.yml --
+services:
+  broker:
+    image: nginx:1.30-alpine
+    volumes:
+      - ./nginx-tls.conf:/etc/nginx/conf.d/default.conf
+      - ./certs:/etc/nginx/certs
+
+-- git-repo/dev/e2e-broker/nginx-tls.conf --
+server {
+    listen 8883 ssl;
+    server_name mqtt.e2e.apinfra.test;
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    location / {
+        default_type text/plain;
+        return 200 'PASSTHROUGH\n';
+    }
+}
+
+-- git-repo/dev/e2e-broker/certs/fullchain.pem --
+-----BEGIN CERTIFICATE-----
+MIIDIjCCAgqgAwIBAgIURUhApZiwZj7MDZzMkH7ru3bFNtkwDQYJKoZIhvcNAQEL
+BQAwIDEeMBwGA1UEAwwVbXF0dC5lMmUuYXBpbmZyYS50ZXN0MB4XDTI2MTEyMzIz
+MTM1NVoXDTM2MTEyMDIzMTM1NVowIDEeMBwGA1UEAwwVbXF0dC5lMmUuYXBpbmZy
+YS50ZXN0MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA5woSPDwNXl1H
+ICdE139zVNpEBYmBopVqQVInr4wcic9RZbGY6z9TPmNs253KtKG+Bhsbn785EmUM
+BBZj7FsJl5bk4ynXkimaE+Ib8WT+nzHfWNV56ZASy+zLJre2psHtYXDCoz7IQmAi
+LqGJS+mDCtnp09dx2rR134c0+h20ep0hcg1Z0Jn9UQcP+q5R38gpW46uyfq0c8G4
+NCfLq2V6ilvz7YtkllnTOLLubH0IxBlhjDHwv4InKV+On3ZSX5Rzyj1JwmWnC/es
+No2Px6Y+vJMkJ4Ejd9ACdye3jAyTYnkWjE7FqOGxE4TNrMLaN0l78EO3gjbW5TBk
+7EX7+V5VVQIDAQABo1QwUjAdBgNVHQ4EFgQUOpSUfQKafU84N9G7BHS4K1hzxOcw
+DwYDVR0TAQH/BAUwAwEB/zAgBgNVHREEGTAXghVtcXR0LmUyZS5hcGluZnJhLnRl
+c3QwDQYJKoZIhvcNAQELBQADggEBAGFh6TWadbFyuoTmPqie36707px4M9IdQajH
+/pca4TK8wM8bfHPYiRcl2N6nnKR3KkiYPNcWhQyOaOUJfIWnG2E/rl2Ht9BzOfad
+/rR++6ek798wZiCOTNeCbb0EiaPO+zkqD+SGc5SXoTah1EmVvG87d9Jl59/Mmq+k
+xbMxdOdFbDe3K4KDXOhv7CRycPK+ZhkhiYnKxrsy79rb60lQgDPnu08Bb9m/2Xp4
+kBpnHDjdt9N9N49qLLLjJt7vBN2OLIE4S9wx/0rSaVJuipjvxysto2xQBQ85YajQ
+XqRURft52hXhwfPmnidLGe2djzLldmR9ZCEyORPfAAZJTk2+v80=
+-----END CERTIFICATE-----
+
+-- git-repo/dev/e2e-broker/certs/privkey.pem --
+-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDnChI8PA1eXUcg
+J0TXf3NU2kQFiYGilWpBUievjByJz1FlsZjrP1M+Y2zbncq0ob4GGxufvzkSZQwE
+FmPsWwmXluTjKdeSKZoT4hvxZP6fMd9Y1XnpkBLL7Msmt7amwe1hcMKjPshCYCIu
+oYlL6YMK2enT13HatHXfhzT6HbR6nSFyDVnQmf1RBw/6rlHfyClbjq7J+rRzwbg0
+J8urZXqKW/Pti2SWWdM4su5sfQjEGWGMMfC/gicpX46fdlJflHPKPUnCZacL96w2
+jY/Hpj68kyQngSN30AJ3J7eMDJNieRaMTsWo4bEThM2swto3SXvwQ7eCNtblMGTs
+Rfv5XlVVAgMBAAECggEARm5FCdS6tJIV7SDbdSA2vd69zrxQ5wnKdvg+/d5mEsK/
+CxO9TLWkwEeZ90cedLs7zOu1m5i1IrzoEVTsCDDmdy46P1/Rhg6lmDsdDpUdo9UV
+w6RsQj235S+d7IMjrKlAnqw7wX0Rml5o/TMkQh6A4q10gS5T2Hqb1lUG2tp0Ws34
+h+wKCkuP1qvaHmJBkligrJ7O+KShbRKzD+b2CWLJedRSx1JEUlev9wUO+GkyS6ME
+kZzqoq8NDf7wgHky4OXXDQwGzsuwHW7CK3gr7uuyOJcYn/LlqSsteGmGyFAJpEvl
+8UvpbKHej/clZ99ugZj7Bson/J3bnB+YuwFhXbEF7wKBgQD3bQFNq/p6Gbc3IhBg
+aH1Dwzby6znWjHnX6lJLcv8HOtb5n9raGPwFgm5nNChJitAvEzkGfEhulFXr1I7I
+uz5+CHu1DP2MH3/ODLVlcLqiO0likzFpysUzilCYDOhbB1iHi3YcQTmO8H7owZYz
+mdCl5e8dIDxwpe4B4ywya0eZuwKBgQDvC7JOgFYdEWzv4DreIPHDk+coQzFe8SOs
+7E/2f/RfBL2m1StIREfri9QCtO+7u/GoP6m0HDy3ZXQpyxGGHe3mZQP26mkwZ4ot
+aepRPbA5XhqUWkB+pgDMiMPI2HZTMlCWhcJTElAyQjcqMjJkmSJ9J3XTXLHGQSp6
+bQB8+PuULwKBgBxo2r51YcRFUaE1+xVmygNO1e9cjP6SkKb3E83v/VJyMh7lePaT
+6dQkHtMgzQNsuey9001oVdTEmX0DogVwYoOMK9AlFrPRJhadpPJp2DQqhImaBxFz
+o+MAHbLnwII7PLILlFs4Lgi4monVOI7iOW/jD+qTOf1hQAvdbsS3RrhjAoGBAJF/
+mw4xCzkyLA5teydNAhq64Y4eJ+TT/ZT5WUp+Y22aYx0yzt9zwBrcxzTGkMzB/rsb
+1N1t+n7eX7A4i/gIK496mMknsNLnkrFFsHu2gpbIcoEt1efAfuf/rruHFa5aB7c2
+vyr1EJ8mspEacJXOp7Fp3UvDNemoLITL5+opWme9AoGBAKiOqizwiL7/7+QZBf82
+88J4/F/yj/vIMqc+MtsTFhToqsczPJyT0eKKN2rCqG8W3AjU24BD+uo8FkBSe3Fv
+dAAs4AvAsj2eOa+wmi9zx/RMxpyUo6/KmAQEGk0vYMjStGjnMDJNp4U/ZmG0CmY7
++wmlP6tHTVMcpuCqYgnwX4la
+-----END PRIVATE KEY-----
+
+-- .env --

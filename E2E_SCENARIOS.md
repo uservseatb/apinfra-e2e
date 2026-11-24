@@ -21,6 +21,7 @@ First deploy, idempotent re-run, validation soft-fail / leave prior state alone.
 | `validation_rollback.txt` | Invalid `settings.yml` soft-fails; prior containers untouched |
 | `target_url_validation.txt` | `proxy.target.url` + `inbound.port`, `url` XOR `service`, or URL with path → soft-fail; prior compose/nginx untouched |
 | `proxies_validation.txt` | `proxy` XOR `proxies`, empty `proxies`, duplicate inbound domain/port → soft-fail; prior compose/nginx untouched |
+| `stream_sni_validation.txt` | `stream.sni`: missing `default`, inbound `8443` reserved, route vs `domain-name`, duplicate `server-name` → soft-fail; prior inbound curl untouched |
 | `git_login_failed.txt` | Config-repo clone HTTP 401 → `git_login_failed`; cycle aborted; prior Docker/Nginx untouched |
 
 ### `notifications/` — Outbound push (Shoutrrr)
@@ -90,6 +91,8 @@ Proxy conf write / restore / port TLS.
 | `reload_pending_retry.txt` | Conf+`-t` OK but `nginx -s reload` fails (docker stub once) → curl inbound ≠ V2; unchanged next cycle retries reload → curl V2; fourth cycle stays V2 (REL-02) |
 | `target_url_skip_compose.txt` | URL-only (no folder) → SkipCompose; HTTP conf/`Host` from URL to sibling on proxy net; curl smoke OK |
 | `target_url_https_upstream.txt` | URL-only `https://` sibling upstream + mock → `:80` 301, `proxy_ssl_server_name`/`Host`; live TLS + redirect smoke |
+| `stream_sni_passthrough.txt` | `stream.sni.enabled` + route + `default: reject`: managed mock domain HTTPS + `:80` 301; distinct TLS body/cert on mqtt SNI; unmapped SNI fails; compose-only broker on `apinfra_proxy_net`, no public ports; host does not publish `8443` |
+| `stream_sni_compose_default.txt` | Compose `stream.sni.default` (no routes): unmapped mqtt SNI reaches TLS backend; managed shop HTTPS + `:80` 301 still OK |
 
 ### `certs/` — Certificates / ACME
 
